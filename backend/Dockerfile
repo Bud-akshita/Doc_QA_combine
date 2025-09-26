@@ -74,8 +74,10 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # Install Python dependencies (with pip cache mount for speed)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --upgrade pip \
+# RUN --mount=type=cache,target=/root/.cache/pip \
+#     python -m pip install --upgrade pip \
+#     && python -m pip install --prefer-binary -r requirements.txt
+RUN python -m pip install --upgrade pip \
     && python -m pip install --prefer-binary -r requirements.txt
 
 # Copy the rest of the application code
