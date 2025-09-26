@@ -1,0 +1,27 @@
+fastapi[standard]== 0.115.12
+uvicorn[standard]==0.31.0         # adjust if needed
+sqlalchemy==2.0.34              # example stable/latest LTS
+psycopg[binary]==3.1.12    # works well with many setups
+passlib[bcrypt]==1.7.4
+python-jose==3.3.0
+python-multipart==0.0.20
+pydantic==2.11.7              # needed for langchain v0.3
+pytz==2025.2
+googletrans==4.0.1
+langchain== 0.3.27
+langchain-community==0.3.27
+langchain-huggingface==0.1.0
+langchain-groq==0.3.7
+groq==0.31.0                     # example; check compatibility
+faiss-cpu==1.12.0
+pymupdf==1.26.3
+pytesseract==0.3.13
+pillow==10.4.0
+spacy==3.8.7
+celery==5.5.3
+redis==6.4.0
+requests==2.32.3
+beautifulsoup4==4.13.3
+fpdf==1.7.2
+reportlab==4.4.3
+python-dotenv==1.0.1
