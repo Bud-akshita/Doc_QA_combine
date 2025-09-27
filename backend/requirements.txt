@@ -26,3 +26,6 @@ fpdf==1.7.2
 reportlab==4.4.3
 python-dotenv==1.0.1
 httpx==0.24.1
+sentencepiece==0.2.0
+sacremoses==0.1.1
+torch==2.4.1
