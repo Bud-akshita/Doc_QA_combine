@@ -4,10 +4,16 @@ from sqlalchemy.ext.declarative import declarative_base
 from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.orm import Session
+import os
 
-URL_DATABASE = 'postgresql://postgres:0604@localhost:5432/postgres'
+DB_HOST = os.environ.get("DB_HOST")
+DB_PORT = os.environ.get("DB_PORT", 5432)
+DB_NAME = os.environ.get("DB_NAME")
+DB_USER = os.environ.get("DB_USER")
+DB_PASSWORD = os.environ.get("DB_PASSWORD")
 
-engine = create_engine(URL_DATABASE)
+SQLALCHEMY_DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+engine = create_engine(SQLALCHEMY_DATABASE_URL)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

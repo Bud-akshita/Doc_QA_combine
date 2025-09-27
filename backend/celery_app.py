@@ -1,10 +1,13 @@
 from celery import Celery
+import os
+
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 # Connect celery to Redis broker
 celery_app = Celery(
     "tasks",
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/0",
+    broker=REDIS_URL,
+    backend=REDIS_URL,
     include=['tasks']
 )
 celery_app.conf.update(
