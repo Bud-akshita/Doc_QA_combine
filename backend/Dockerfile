@@ -72,6 +72,7 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements first (better Docker layer caching)
 COPY requirements.txt .
+RUN cat requirements.txt
 
 # Install Python dependencies (with pip cache mount for speed)
 # RUN --mount=type=cache,target=/root/.cache/pip \
