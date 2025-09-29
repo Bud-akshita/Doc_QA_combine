@@ -14,7 +14,7 @@ app = FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://docqa-frontend-347720367133.asia-south1.run.app"],  
+    allow_origins=["https://doc-qa-frontend-347720367133.asia-south1.run.app"],  
     allow_credentials=True,
     allow_methods=["*"],  
     allow_headers=["*"], 
