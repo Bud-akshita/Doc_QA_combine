@@ -12,6 +12,8 @@ from datetime import datetime,timedelta,time
 from googletrans import Translator
 import re
 import pytz
+from google.cloud import storage
+import tempfile
 
 import traceback
 from langchain_community.vectorstores import FAISS
@@ -37,8 +39,8 @@ router = APIRouter(
     tags=["documents"]
 )
 
-UPLOAD_DIR = "uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+UPLOAD_BUCKET = "my_bucket_upload"
+VECTORESTORE_BUCKET ="my_vectorestre_bucket"
 
 embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 # groq_api_key='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'
@@ -99,6 +101,59 @@ class EmailRequest(BaseModel):
     days: int        
     subject: str
 
+def upload_to_gcs(file: UploadFile, destination_blob_name: str):
+    client = storage.Client()
+    bucket = client.bucket(UPLOAD_BUCKET)
+    blob = bucket.blob(destination_blob_name)
+
+    # Save file temporarily before uploading to GCS
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = tmp.name
+
+    blob.upload_from_filename(tmp_path)
+    return f"gs://{UPLOAD_BUCKET}/{destination_blob_name}"
+
+def download_from_gcs(user_id: int, file_name: str) -> str:
+    """Download a file from GCS to /tmp and return local path"""
+    client = storage.Client()
+    bucket = client.bucket(UPLOAD_BUCKET)
+    blob = bucket.blob(f"{user_id}/{file_name}")
+
+    tmp_path = os.path.join(tempfile.gettempdir(), file_name)
+    blob.download_to_filename(tmp_path)
+    return tmp_path
+
+def delete_from_gcs(user_id: int, file_name: str):
+    """Delete file from GCS"""
+    client = storage.Client()
+    bucket = client.bucket(UPLOAD_BUCKET)
+    blob = bucket.blob(f"{user_id}/{file_name}")
+    blob.delete()
+
+def download_vectore_from_gcs(user_id: str, filename: str) -> str:
+    """
+    Downloads the vector store folder from GCS to a temporary local directory.
+    Returns the path to the downloaded vector store.
+    """
+    client = storage.Client()
+    bucket = client.bucket(VECTORESTORE_BUCKET)  # Replace with your bucket name
+    prefix = f"{user_id}/{filename}"  # Assuming your vector store is stored as a folder per user/document
+
+    # Create a temp directory
+    temp_dir = tempfile.mkdtemp()
+
+    # List all blobs with the given prefix
+    blobs = bucket.list_blobs(prefix=prefix)
+
+    for blob in blobs:
+        rel_path = os.path.relpath(blob.name, prefix)
+        local_path = os.path.join(temp_dir, rel_path)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        blob.download_to_filename(local_path)
+
+    return temp_dir
+
 def build_faiss_index(page_texts,embeddings):
     # Split into chunks
     docs = []
@@ -145,11 +200,11 @@ async def upload_doc(
     doc_type: str = Form(...),            
     user: dict = Depends(get_current_user)
 ):
-    # Save the file
     file_name = file.filename
-    file_path = os.path.join(UPLOAD_DIR, file_name)
-    with open(file_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
+
+    # Upload file directly to GCS
+    gcs_uri = upload_to_gcs(file, f"{user['id']}/{file_name}")
+
     # Save in database
     new_doc = Documents(
         user_id=user["id"],
@@ -160,16 +215,19 @@ async def upload_doc(
     db.commit()
     db.refresh(new_doc)
 
-    # Extract content as plain string
-    document = extract_content(file_path)
-    build_vectorstore_simple(document,file_name)
+    # Instead of local file_path, download from GCS if needed
+    # e.g., process file contents
+    # For now, use temp file download if required
+    tmp_download = tempfile.NamedTemporaryFile(delete=False).name
+    storage.Client().bucket(UPLOAD_BUCKET).blob(f"{user['id']}/{file_name}").download_to_filename(tmp_download)
+
+    document = extract_content(tmp_download)
+    build_vectorstore_simple(document, file_name,VECTORESTORE_BUCKET,user["id"])
 
     return new_doc
 
 @router.delete("/delete")
-async def delete_doc(doc_name: str,doc_type: str,
-    db: db_dependency,
-    user:dict = Depends(get_current_user)):
+async def delete_doc(doc_name: str, doc_type: str, db: db_dependency, user: dict = Depends(get_current_user)):
     document = (
         db.query(Documents)
         .filter(
@@ -179,13 +237,16 @@ async def delete_doc(doc_name: str,doc_type: str,
         )
         .first()
     )
-
     if not document:
         raise HTTPException(status_code=404, detail="Document not found or not owned by user")
 
+    # Delete from GCS
+    delete_from_gcs(user["id"], doc_name)
+
+    # Delete DB entry
     db.delete(document)
     db.commit()
-    return {"message": f"Document '{doc_name}' deleted successfully"}
+    return {"message": f"Document '{doc_name}' deleted successfully from DB and GCS"}
     
 def retrieve_best_chunks(question, vectorstore, top_k=20):
     results = vectorstore.similarity_search_with_score(question, k=top_k)
@@ -249,7 +310,7 @@ def replace_refs_web(text,chunk_map):
 
 @router.post("/ask-question",response_model=AskQuestionResponse)
 async def ask_question(db: db_dependency,filename: str = Form(...),document_type: str = Form(...),question: str = Form(...), user: dict = Depends(get_current_user)):
-    file_path = os.path.join(UPLOAD_DIR, filename)
+    file_path = download_from_gcs(user["id"], filename)
     
     if document_type =="website":
 
@@ -316,8 +377,11 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
             # vectors = build_faiss_index(content,embedding_model)
             # best_chunks = retrieve_best_chunks(question, vectors)
             
-            store_path = "VectoreStore/"+filename
+            store_path = download_vectore_from_gcs(user["id"], filename)
             index, chunks, metadata = load_vectorstore_simple(store_path)
+
+            # Optionally, delete temp folder after loading
+            shutil.rmtree(store_path, ignore_errors=True)
             results = similarity_search(question, index, chunks, metadata, k=22)
             print(metadata)
             context, chunk_map, ref_map= build_context(results)
@@ -373,10 +437,9 @@ async def get_chat_history_by_document(
 
 @router.post("/summary")
 async def generate_summary(filename :str = Form(...),document_type: str = Form(...)):
-    file_path = os.path.join(UPLOAD_DIR, filename)
+    file_path = download_from_gcs(user["id"], filename)
     
     if document_type=='website':
-        file_path = os.path.join(UPLOAD_DIR, filename)
         save_vectore(file_path)
         answer = summary()
         return {"summary":answer}
@@ -516,7 +579,7 @@ async def ask_question_hindi(
     
     try:
         if document_type == "website":
-            file_path = os.path.join(UPLOAD_DIR, filename)
+            file_path = download_from_gcs(user["id"], filename)
 
             prompt=ChatPromptTemplate.from_template(
                 """
@@ -580,8 +643,10 @@ async def ask_question_hindi(
             
             # vectors = build_faiss_index(content, embedding_model)
             # best_chunks = retrieve_best_chunks(question, vectors)
-            store_path = "VectoreStore/"+filename
+            store_path = download_vectore_from_gcs(user["id"], filename)
             index, chunks, metadata = load_vectorstore_simple(store_path)
+            # Optionally, delete temp folder after loading
+            shutil.rmtree(store_path, ignore_errors=True)
             results = similarity_search(question, index, chunks, metadata, k=22)
             print(metadata)
             context, chunk_map, ref_map= build_context(results)    
@@ -625,10 +690,11 @@ async def ask_question_hindi(
 @router.post("/translate/{filename}")
 async def translate_file(filename: str):
     """Translate a document in uploads folder into Hindi and return as downloadable PDF."""
-    file_path = os.path.join(UPLOAD_DIR, filename)
+    try:
+        file_path = download_from_gcs(user["id"], filename)
+    except Exception:
+        raise HTTPException(status_code=404, detail="File not found in GCS")
 
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
 
     try:
         # Extract text (list of text chunks from the file)
@@ -644,7 +710,7 @@ async def translate_file(filename: str):
 
         # Save to PDF
         output_pdf = os.path.splitext(filename)[0] + "_hindi.pdf"
-        output_path = os.path.join(UPLOAD_DIR, output_pdf)
+        output_path = download_from_gcs(user["id"], output_pdf)
         save_pdf(final_text, output_path)
 
         # Return file for download
@@ -659,14 +725,14 @@ async def translate_file(filename: str):
     
 risk_results = {}
 
-def run_high_risk(filename: str, doc_type: str):
+def run_high_risk(filename: str, doc_type: str,user):
     global risk_vectors
 
-    file_path = os.path.join(UPLOAD_DIR, filename)
+    file_path = download_from_gcs(user["id"], filename)
     content = extract_content(file_path)
 
     risk_vectors = build_faiss_index(content, embedding_model)
-    extract(risk_vectors)
+    extract(risk_vectors,user["id"])
     high_risk_clauses = find_high_risk_clauses(doc_type)
 
     risk_results[filename] = high_risk_clauses
@@ -676,9 +742,10 @@ def run_high_risk(filename: str, doc_type: str):
 async def start_high_risk(
     filename: str = Form(...),
     doc_type: str = Form(...),
+    user: dict = Depends(get_current_user),
     background_tasks: BackgroundTasks = None
 ):
-    background_tasks.add_task(run_high_risk, filename, doc_type)
+    background_tasks.add_task(run_high_risk, filename, doc_type,user)
     return {"status": "processing", "message": f"High risk analysis started for {filename}"}
 
 
@@ -713,9 +780,9 @@ async def get_reference(ref: str):
         raise HTTPException(status_code=500, detail=f"Error retrieving reference: {str(e)}")
 
 @router.post("/smart-reminder")
-async def extract_dates(file: str = Form(...),doc_type: str = Form(...)):
+async def extract_dates(filename: str = Form(...),doc_type: str = Form(...),user: dict = Depends(get_current_user)):
 
-    file_path = os.path.join(UPLOAD_DIR,file)
+    file_path = download_from_gcs(user["id"], filename)
     try:
         page_texts = extract_content(file_path)
         page_texts = "\n".join(page_texts)

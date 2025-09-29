@@ -8,6 +8,11 @@ embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 import re
 from typing import Tuple
 
+from google.cloud import storage
+import tempfile
+
+UPLOAD_BUCKET = "my_bucket_upload"
+
 def assess_clause_risk(clause_text: str, doc_type: str) -> Tuple[str, str]:
     """
     Assess risk level of a legal clause based on its text and document type.
@@ -189,19 +194,31 @@ def get_reference_chunk(vectorstore,ref: str) -> Optional[Dict]:
 
 def find_high_risk_clauses(doc_type) -> List[Dict]:
     """
-    Find and return all high-risk clauses from the processed file
+    Find and return all high-risk clauses from the processed file stored in GCS
     """
     try:
-        with open("./uploads/clean.json", "r", encoding="utf-8") as f:
+        # Create GCS client
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(UPLOAD_BUCKET)
+        blob = bucket.blob("clean.json")   # clean.json at bucket root (adjust path if nested)
+
+        # Download to a temporary file
+        with tempfile.NamedTemporaryFile(mode="w+b", delete=False) as tmp_file:
+            blob.download_to_filename(tmp_file.name)
+            tmp_file_path = tmp_file.name
+
+        # Load JSON from downloaded file
+        with open(tmp_file_path, "r", encoding="utf-8") as f:
             clauses = json.load(f)
 
-        processed = process_clauses_file(clauses,doc_type)
+        # Process and categorize
+        processed = process_clauses_file(clauses, doc_type)
         categories = categorize_by_risk(processed)
-        
+
         return categories["HIGH"]
-        
+
     except FileNotFoundError:
-        print("clean.json file not found")
+        print("clean.json file not found in bucket")
         return []
     except json.JSONDecodeError:
         print("Error parsing clean.json file")

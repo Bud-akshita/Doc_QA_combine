@@ -5,9 +5,14 @@ import re
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import fitz
 import json
+from google.cloud import storage
+import tempfile
+import shutil
 
 # Embedding model wrapper for LangChain
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+
+UPLOAD_BUCKET = "my_bucket_upload"
 
 def clean_text(text):
     """Clean and normalize text content"""
@@ -102,33 +107,47 @@ def build_faiss_index(page_texts, chunk_size=800, chunk_overlap=100):
     
     # Build vector store
     vectorstore = FAISS.from_documents(docs, embeddings)
-    
-    # Save URL mapping for reference
-    with open("./uploads/url_mapping.json", "w") as f:
-        json.dump(url_mapping, f, indent=2)
-    
+
+    # Save URL mapping locally first
+    with tempfile.NamedTemporaryFile(mode="w+", delete=False, suffix=".json") as tmp_file:
+        json.dump(url_mapping, tmp_file, indent=2)
+        tmp_file.flush()
+        tmp_file_path = tmp_file.name
+
+    # Upload URL mapping.json to GCS
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(UPLOAD_BUCKET)
+    blob = bucket.blob("url_mapping.json")
+    blob.upload_from_filename(tmp_file_path)
+
     return vectorstore, url_mapping
 
 def save_vectore(pdf):
     print("Building improved FAISS index...")
     
-    # Read page texts
+    # Read PDF
     doc = fitz.open(pdf)
-    page_texts = {}
-
-    for page_num in range(len(doc)):
-        page = doc[page_num]
-        text = page.get_text()
-        page_texts[page_num + 1] = text.strip()
+    page_texts = {page_num + 1: doc[page_num].get_text().strip() for page_num in range(len(doc))}
     
-    # Build improved FAISS index
+    # Build index
     vectorstore, url_mapping = build_faiss_index(page_texts, chunk_size=800, chunk_overlap=100)
     
-    # Save the vector store
-    vectorstore.save_local("./uploads/faiss_index_directory")
+    # Save index locally first
+    local_dir = tempfile.mkdtemp()
+    vectorstore.save_local(local_dir)
     
-    print("FAISS index saved successfully!")
+    # Upload FAISS index directory to GCS
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(UPLOAD_BUCKET)
+    
+    for root, _, files in os.walk(local_dir):
+        for filename in files:
+            local_path = os.path.join(root, filename)
+            relative_path = os.path.relpath(local_path, local_dir)
+            blob = bucket.blob(f"faiss_index_directory/{relative_path}")
+            blob.upload_from_filename(local_path)
+    
+    print("FAISS index uploaded successfully to GCS!")
     print(f"URL mapping: {url_mapping}")
-    print("URL mapping saved to url_mapping.json")
 
     return vectorstore

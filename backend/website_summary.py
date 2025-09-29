@@ -4,18 +4,44 @@ from groq import Groq
 import re
 import json
 from collections import defaultdict
+from google.cloud import storage
+import tempfile
+
+UPLOAD_BUCKET = "my_upload_bucket"
 
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 client = Groq(api_key="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")
 
-def load_url_mapping():
-    """Load URL mapping if available"""
+def load_url_mapping_gcs():
+    """Load URL mapping from GCS bucket"""
     try:
-        with open("./uploads/url_mapping.json", "r") as f:
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(UPLOAD_BUCKET)
+        blob = bucket.blob("url_mapping.json")
+        with tempfile.NamedTemporaryFile(mode="w+", delete=False) as tmp_file:
+            blob.download_to_filename(tmp_file.name)
+            tmp_file_path = tmp_file.name
+        with open(tmp_file_path, "r") as f:
             return json.load(f)
-    except FileNotFoundError:
-        print("URL mapping file not found. Proceeding without it.")
+    except Exception as e:
+        print(f"Could not load URL mapping from GCS: {e}")
         return {}
+    
+def load_faiss_index_from_gcs():
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(UPLOAD_BUCKET)
+    
+    temp_dir = tempfile.mkdtemp()
+    
+    blobs = bucket.list_blobs(prefix="faiss_index_directory/")
+    for blob in blobs:
+        relative_path = blob.name.replace("faiss_index_directory/", "")
+        local_path = os.path.join(temp_dir, relative_path)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        blob.download_to_filename(local_path)
+    
+    vectorstore = FAISS.load_local(temp_dir, embeddings, allow_dangerous_deserialization=True)
+    return vectorstore
 
 def group_chunks_by_url(chunks):
     """Group chunks by their primary URL to avoid fragmentation"""
@@ -135,11 +161,7 @@ def summary():
     
     # Try to load improved index first, then fall back to original
     try:
-        vectorstore = FAISS.load_local(
-            "./uploads/faiss_index_directory",
-            embeddings,
-            allow_dangerous_deserialization=True
-        )
+        load_faiss_index_from_gcs()
         print("Loaded improved FAISS index")
     except:
         try:

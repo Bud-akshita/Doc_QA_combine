@@ -14,7 +14,7 @@ app = FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  
+    allow_origins=["https://docqa-frontend-347720367133.asia-south1.run.app"],  
     allow_credentials=True,
     allow_methods=["*"],  
     allow_headers=["*"], 
@@ -23,8 +23,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(docs.router)
 app.include_router(website.router)
-
-#                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                app.mount("/", StaticFiles(directory="frontend/build", html=True), name="static")
+# app.mount("/", StaticFiles(directory="frontend/build", html=True), name="static")
 
 models.Base.metadata.create_all(bind=engine)
 

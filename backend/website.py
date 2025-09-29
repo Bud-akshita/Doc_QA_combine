@@ -13,11 +13,11 @@ from database import db_dependency
 from pydantic import BaseModel, Field
 from auth import get_current_user
 from models import Documents
+from io import BytesIO
 
-UPLOAD = "uploads"
+from google.cloud import storage
 
-# Create uploads directory if it doesn't exist
-os.makedirs(UPLOAD, exist_ok=True)
+bucket_name = 'my_upload_bucket'
 
 router = APIRouter(
     prefix="/website",
@@ -27,6 +27,20 @@ router = APIRouter(
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 }
+
+def upload_pdf_to_gcs(local_path: str, bucket_name: str, dest_blob_name: str) -> str:
+    """
+    Uploads a local PDF to GCS and returns the GCS URL.
+    """
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(dest_blob_name)
+    blob.upload_from_filename(local_path)
+
+    # Make it publicly accessible (optional)
+    blob.make_public()
+
+    return blob.public_url  # or return f"gs://{bucket_name}/{dest_blob_name}"
 
 def is_file_url(url):
     """
@@ -177,51 +191,41 @@ def scrap(url):
     
     return saved_text
 
-def scraped_data_to_pdf(saved_text, base_url):
-    """Convert scraped text to PDF with Unicode support"""
-    domain = urlparse(base_url).netloc.replace("www.", "").split(".")[0]
-    # Simplified PDF name without timestamp
-    pdf_name = f"{domain}.pdf"
-    pdf_path = os.path.join(UPLOAD, pdf_name)
+def scraped_data_to_pdf(saved_text, base_url, bucket_name=None):
     
-    # Create PDF with Unicode support
+    domain = urlparse(base_url).netloc.replace("www.", "").split(".")[0]
+    pdf_name = f"{domain}.pdf"
+
+    # Create PDF in memory
+    pdf_buffer = BytesIO()
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
-    
-    # Use Arial font which has good Unicode support
     pdf.set_font("Arial", size=12)
-    
+
     for url, text in saved_text.items():
         pdf.add_page()
-        
-        # URL as header
         pdf.set_font_size(14)
         pdf.multi_cell(0, 10, f"URL: {url}")
         pdf.ln(5)
-        
-        # Body text
         pdf.set_font_size(11)
-        
-        # Clean and format text for PDF
         clean_text = re.sub(r'\s+', ' ', text).strip()
-        
-        # Handle text that might contain unsupported characters
-        try:
-            pdf.multi_cell(0, 8, clean_text)
-        except Exception:
-            # If there are encoding issues, use a safer approach
-            try:
-                # Remove non-ASCII characters
-                safe_text = re.sub(r'[^\x00-\x7F]+', ' ', clean_text)
-                pdf.multi_cell(0, 8, safe_text)
-            except:
-                # Final fallback
-                pdf.multi_cell(0, 8, "Content contains characters that cannot be displayed in PDF")
-        
-        pdf.ln(10)
-    
-    pdf.output(pdf_path)
-    return pdf_path
+        pdf.multi_cell(0, 8, clean_text)
+
+    # Output PDF to the BytesIO buffer
+    pdf.output(pdf_buffer)
+    pdf_buffer.seek(0)
+
+    # Upload to GCS
+    if bucket_name:
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        blob = bucket.blob(pdf_name)
+        blob.upload_from_file(pdf_buffer, content_type="application/pdf")
+        blob.make_public()  # optional
+        return blob.public_url  # returns the GCS public URL
+
+    # Fallback (should not happen)
+    return None
 
 @router.get("/scrape")
 async def scrape_endpoint(
@@ -249,8 +253,8 @@ async def scrape_endpoint(
             raise HTTPException(status_code=500, detail="No data could be scraped from the website")
         
         # Convert to PDF
-        pdf_path = scraped_data_to_pdf(data, url)
-        pdf_filename = os.path.basename(pdf_path)
+        gcs_url = scraped_data_to_pdf(data, url, bucket_name=bucket_name)
+        pdf_filename = gcs_url.split("/")[-1]  # get file name from URL
         
         # Save document information to database
         document = Documents(
@@ -265,11 +269,7 @@ async def scrape_endpoint(
         db.refresh(document)
         
         # Return the file response
-        return FileResponse(
-            path=pdf_path,
-            filename=pdf_filename,
-            media_type="application/pdf"
-        )
+        return {"pdf_url": gcs_url, "doc_name": pdf_filename}
         
     except concurrent.futures.TimeoutError:
         raise HTTPException(status_code=504, detail="Scraping operation timed out")

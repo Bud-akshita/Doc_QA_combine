@@ -4,6 +4,8 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from groq import Groq
 import re
 import os
+from google.cloud import storage
+import tempfile
 
 client = Groq(api_key="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")
 
@@ -57,8 +59,16 @@ Return results strictly in JSON format as a flat list of objects:
 ]
 """
 
-def extract(vectorstore):
+UPLOAD_BUCKET = "my_bucket_upload"   # your bucket name
 
+def save_to_gcs(local_path: str, gcs_path: str):
+    """Upload a local file to GCS"""
+    bucket = storage_client.bucket(UPLOAD_BUCKET)
+    blob = bucket.blob(gcs_path)
+    blob.upload_from_filename(local_path)
+    print(f"Uploaded {local_path} -> gs://{UPLOAD_BUCKET}/{gcs_path}")
+
+def extract(vectorstore, user_id: int):
     all_chunks = list(vectorstore.docstore._dict.values())
 
     BATCH_SIZE = 2
@@ -67,27 +77,32 @@ def extract(vectorstore):
     print(f"Total chunks to process: {total_chunks}")
     print(f"Processing in batches of {BATCH_SIZE}")
 
+    # Use /tmp for temp storage
+    tmp_clauses_path = os.path.join(tempfile.gettempdir(), "clauses.json")
+
+    # Start fresh each time
+    if os.path.exists(tmp_clauses_path):
+        os.remove(tmp_clauses_path)
+
     for batch_start in range(0, total_chunks, BATCH_SIZE):
         batch_end = min(batch_start + BATCH_SIZE, total_chunks)
         current_batch = all_chunks[batch_start:batch_end]
-        
+
         print(f"\nProcessing batch {batch_start//BATCH_SIZE + 1}: chunks {batch_start + 1}-{batch_end}")
-        
+
         context = ""
         for doc in current_batch:
             content = doc.page_content
             meta = doc.metadata
-            # Build a compact metadata string
             meta_str = f"pg{meta.get('page_number', 0)}ck{meta.get('chunk_index', 0)}"
-            
             context += f"Content: {content}\n[REF]: {meta_str} [REF]\n"
-        
+
         print(f"Context length for this batch: {len(context)} characters")
-        
+
         prompt = USER_TEMPLATE.format(context=context)
 
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant", 
+            model="llama-3.1-8b-instant",
             messages=[
                 {"role": "system", "content": SYSTEM_INSTRUCTIONS},
                 {"role": "user", "content": prompt}
@@ -96,20 +111,26 @@ def extract(vectorstore):
             temperature=0.1
         )
 
-        with open("./uploads/clauses.json","a",encoding="utf-8") as f:
+        # Append results to tmp file
+        with open(tmp_clauses_path, "a", encoding="utf-8") as f:
             f.write(response.choices[0].message.content)
 
-    
-    with open("./uploads/clauses.json", "r", encoding="utf-8") as f:
+    # Post-process
+    with open(tmp_clauses_path, "r", encoding="utf-8") as f:
         data = f.read()
 
-    cleaned_data = data.replace("][",",")
+    cleaned_data = data.replace("][", ",")
     cleaned_data = re.sub(r"\{[^{}]*\{", "{", cleaned_data)
     cleaned_data = re.sub(r",+", ",", cleaned_data)
 
-    if os.path.exists("./uploads/clauses.json"):
-        os.remove("./uploads/clauses.json")
-
-    with open("./uploads/clean.json","w", encoding="utf-8") as f:
+    tmp_clean_path = os.path.join(tempfile.gettempdir(), "clean.json")
+    with open(tmp_clean_path, "w", encoding="utf-8") as f:
         f.write(cleaned_data)
+
+    # Save final clean.json into GCS (per-user folder)
+    save_to_gcs(tmp_clean_path, f"{user_id}/clean.json")
+
+    print(f"Final cleaned JSON saved to gs://{UPLOAD_BUCKET}/{user_id}/clean.json")
+
+    return f"gs://{UPLOAD_BUCKET}/{user_id}/clean.json"
     

@@ -15,6 +15,9 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 import faiss
 import pickle
+from google.cloud import storage
+import tempfile
+import shutil
 
 # Initialize models
 tokenizer = AutoTokenizer.from_pretrained('jinaai/jina-embeddings-v2-base-en', trust_remote_code=True)
@@ -37,40 +40,40 @@ prompt = ChatPromptTemplate.from_template(
     """
 )
 
-def extract_pdf_with_ocr(file_path):
-    start_time = time.time()
-    doc = fitz.open(file_path)
-    all_docs = []
+def upload_vectorstore_to_gcs(local_path: str, bucket_name: str, dest_prefix: str):
+    """
+    Uploads all files from a local vector store folder to GCS under dest_prefix.
+    """
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    
+    for root, _, files in os.walk(local_path):
+        for file in files:
+            local_file_path = os.path.join(root, file)
+            # Compute blob name relative to dest_prefix
+            rel_path = os.path.relpath(local_file_path, local_path)
+            blob_name = os.path.join(dest_prefix, rel_path)
+            blob = bucket.blob(blob_name)
+            blob.upload_from_filename(local_file_path)
+    print(f"Vector store uploaded to gs://{bucket_name}/{dest_prefix}/")
 
-    for page_num in range(len(doc)):
-        page = doc[page_num]
-        page_text = page.get_text("text")
-
-        images = page.get_images(full=True)
-        ocr_texts = []
-        for img_index, img in enumerate(images):
-            xref = img[0]
-            base_image = doc.extract_image(xref)
-            image_bytes = base_image["image"]
-            image = Image.open(io.BytesIO(image_bytes))
-            ocr_text = pytesseract.image_to_string(image)
-            if ocr_text.strip():
-                ocr_texts.append(ocr_text)
-
-        merged_text = page_text + "\n" + "\n".join(ocr_texts)
-        all_docs.append(merged_text.strip())
-
-    if not any(text.strip() for text in all_docs):
-        page_texts = []
-        for page_num in range(len(doc)):
-            page = doc[page_num]
-            pix = page.get_pixmap(dpi=200)
-            img = Image.open(io.BytesIO(pix.tobytes("png")))
-            text = pytesseract.image_to_string(img)
-            page_texts.append(text.strip())
-        return page_texts 
-    print("Time taken to extract text from PDF:", time.time()-start_time)
-    return all_docs
+def download_vectorstore_from_gcs(bucket_name: str, prefix: str) -> str:
+    """
+    Downloads a vector store from GCS to a temporary local folder.
+    Returns the path to the temp folder.
+    """
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    temp_dir = tempfile.mkdtemp()
+    
+    blobs = bucket.list_blobs(prefix=prefix)
+    for blob in blobs:
+        rel_path = os.path.relpath(blob.name, prefix)
+        local_path = os.path.join(temp_dir, rel_path)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        blob.download_to_filename(local_path)
+    
+    return temp_dir
 
 def fixed_size_chunker(document, tokenizer, chunk_size=150, stride=130):
     all_chunks = []
@@ -152,33 +155,39 @@ def late_chunking(token_embeddings, span_annotations, max_length=2000):
     print("Time taken to compute chunk embeddings:", time.time() - start_time)
     return pooled_embeddings
 
-def build_vectorstore_simple(document,file_name):
+def build_vectorstore_simple(document, file_name, bucket_name, user_id):
     print("Building vector store...")
 
-    store_dir = "VectoreStore/"+file_name
-    os.makedirs(store_dir, exist_ok=True)
+    # Create temp folder instead of local permanent folder
+    if bucket_name:
+        store_dir = tempfile.mkdtemp()
+    else:
+        store_dir = os.path.join("VectoreStore", file_name)
+        os.makedirs(store_dir, exist_ok=True)
 
-    # document = extract_pdf_with_ocr(pdf_path)
     whole_document = " ".join(document)
     chunks, span_annotations, metadata = fixed_size_chunker(document, tokenizer)
     
     token_embeddings = document_to_token_embeddings(model, tokenizer, whole_document)
     chunk_embeddings = late_chunking(token_embeddings, span_annotations)
     
-    # Convert to numpy array
     embeddings_array = np.array(chunk_embeddings)
-    
-    # Create FAISS index
     dimension = embeddings_array.shape[1]
-    index = faiss.IndexFlatIP(dimension)  # Inner Product for cosine similarity
-    faiss.normalize_L2(embeddings_array)  # Normalize for cosine similarity
+    index = faiss.IndexFlatIP(dimension)
+    faiss.normalize_L2(embeddings_array)
     index.add(embeddings_array)
     
-    # Save index and data
-    faiss.write_index(index, f"{store_dir}/index.faiss")
-    
+    # Save FAISS index and metadata
+    faiss.write_index(index, os.path.join(store_dir, "index.faiss"))
     with open(os.path.join(store_dir, "chunks_metadata.pkl"), "wb") as f:
         pickle.dump({"chunks": chunks, "metadata": metadata}, f)
+    
+    # Upload to GCS if bucket_name provided
+    if bucket_name and user_id:
+        dest_prefix = f"{user_id}/{file_name}"
+        upload_vectorstore_to_gcs(store_dir, bucket_name, dest_prefix)
+        shutil.rmtree(store_dir, ignore_errors=True)
+        print(f"Vector store uploaded to gs://{bucket_name}/{dest_prefix}/")
     
     return index, chunks, metadata
 
@@ -224,18 +233,26 @@ def similarity_search(query, index, chunks, metadata, k=25):
     print(results)
     return results
 
-def load_vectorstore_simple(store_path):
-    """Load the saved vector store"""
-    index_path = store_path+ "/index.faiss"
-    metadata_path = store_path+ "/chunks_metadata.pkl"
-    
-    # load FAISS index
+def load_vectorstore_simple(bucket_name=None, prefix=None):
+    """
+    Load vector store. If bucket_name and prefix are provided, download from GCS first.
+    """
+    if bucket_name and prefix:
+        store_path = download_vectorstore_from_gcs(bucket_name, prefix)
+    else:
+        store_path = prefix  # local path
+
+    index_path = os.path.join(store_path, "index.faiss")
+    metadata_path = os.path.join(store_path, "chunks_metadata.pkl")
+
     index = faiss.read_index(index_path)
-    
-    # load metadata
     with open(metadata_path, "rb") as f:
         data = pickle.load(f)
-    
+
+    # Clean up temp folder if downloaded from GCS
+    if bucket_name:
+        shutil.rmtree(store_path, ignore_errors=True)
+
     return index, data["chunks"], data["metadata"]
 
 def query_with_llm(query, index, chunks, metadata, k=25):
@@ -254,29 +271,29 @@ def query_with_llm(query, index, chunks, metadata, k=25):
         "source_documents": similar_docs
     }
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
     
-    # Option 1: Build new vector store
-    index, chunks, metadata = build_vectorstore_simple("uploads/lic1.pdf","lic1.pdf")
+#     # Option 1: Build new vector store
+#     index, chunks, metadata = build_vectorstore_simple("uploads/lic1.pdf","lic1.pdf")
     
-    # Option 2: Load existing vector store
-    # index, chunks, metadata = load_vectorstore_simple()
+#     # Option 2: Load existing vector store
+#     # index, chunks, metadata = load_vectorstore_simple()
     
-    # Test similarity search
-    query = "does policy holder can can return the policy and what conditions are applied if he returns the policy? "
+#     # Test similarity search
+#     query = "does policy holder can can return the policy and what conditions are applied if he returns the policy? "
     
-    # Just similarity search
-    results = similarity_search(query, index, chunks, metadata, k=25)
-    print("Similarity Search Results:")
-    for i, result in enumerate(results):
-        print(f"{i+1}. Score: {result['score']:.4f}")
-        print(f"   Content: {result['content'][:100]}...")
-        print(f"   Metadata: {result['metadata']}")
-        print()
+#     # Just similarity search
+#     results = similarity_search(query, index, chunks, metadata, k=25)
+#     print("Similarity Search Results:")
+#     for i, result in enumerate(results):
+#         print(f"{i+1}. Score: {result['score']:.4f}")
+#         print(f"   Content: {result['content'][:100]}...")
+#         print(f"   Metadata: {result['metadata']}")
+#         print()
     
-    # Full RAG pipeline
-    rag_result = query_with_llm(query, index, chunks, metadata)
-    print("LLM Answer:", rag_result["answer"])
-    print("\nSource Documents:")
-    for doc in rag_result["source_documents"]:
-        print(f"- Score: {doc['score']:.4f} | Page: {doc['metadata'].get('page_no', 'N/A')}")
+#     # Full RAG pipeline
+#     rag_result = query_with_llm(query, index, chunks, metadata)
+#     print("LLM Answer:", rag_result["answer"])
+#     print("\nSource Documents:")
+#     for doc in rag_result["source_documents"]:
+#         print(f"- Score: {doc['score']:.4f} | Page: {doc['metadata'].get('page_no', 'N/A')}")
