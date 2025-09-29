@@ -30,3 +30,5 @@ sentencepiece==0.2.0
 sacremoses==0.1.1
 torch==2.6
 google-cloud-storage==2.18.2
+transformers==4.55.1
+kombu==5.5.4
