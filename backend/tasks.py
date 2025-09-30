@@ -2,13 +2,10 @@ import smtplib
 from email.mime.text import MIMEText
 from celery_app import celery_app
 import os
-from dotenv import load_dotenv
 from celery.result import AsyncResult
 from celery.exceptions import Ignore
 
 celery_app.control.purge()
-
-load_dotenv()
 
 @celery_app.task
 def send_email(subject, body, to_email):
@@ -16,8 +13,8 @@ def send_email(subject, body, to_email):
 
     try:
         # Sender email setup
-        from_email = os.getenv("email")
-        password = os.getenv("pass")
+        from_email = os.environ.get("email")
+        password = os.environ.get("pass")
         
         print(f"From email: {from_email}")
         
