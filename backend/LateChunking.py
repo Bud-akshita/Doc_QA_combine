@@ -20,7 +20,7 @@ import tempfile
 import shutil
 from huggingface_hub import login
 
-login(token=os.getenv("HF_TOKEN"))
+login(token=os.environ.get("HF_TOKEN"))
 
 # Initialize models
 tokenizer = AutoTokenizer.from_pretrained('jinaai/jina-embeddings-v2-base-en', trust_remote_code=True)
