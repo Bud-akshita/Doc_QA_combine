@@ -248,7 +248,7 @@ async def upload_doc(
         # For now, use temp file download if required
         tmp_download = tempfile.NamedTemporaryFile(delete=False).name
         storage.Client().bucket(UPLOAD_BUCKET).blob(f"{user['id']}/{file_name}").download_to_filename(tmp_download)
-
+        logging.info("Extracting content from file: %s (temp path: %s)", file_name, tmp_download)
         document = extract_content(tmp_download)
         build_vectorstore_simple(document, file_name,VECTORESTORE_BUCKET,user["id"])
 

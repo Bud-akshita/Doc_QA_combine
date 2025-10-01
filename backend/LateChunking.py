@@ -20,6 +20,7 @@ import tempfile
 import shutil
 from huggingface_hub import login
 import logging
+from google.api_core import exceptions as gcs_exceptions
 
 login(token=os.environ.get("HF_TOKEN"))
 
