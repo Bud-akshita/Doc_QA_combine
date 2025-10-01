@@ -79,7 +79,7 @@ RUN cat requirements.txt
 #     python -m pip install --upgrade pip \
 #     && python -m pip install --prefer-binary -r requirements.txt
 RUN python -m pip install --upgrade pip \
-    && python -m pip install --prefer-binary -r requirements.txt
+    && python -m pip install -r requirements.txt
 
 # Copy the rest of the application code
 COPY . .

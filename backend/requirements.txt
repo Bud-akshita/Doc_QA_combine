@@ -1,7 +1,8 @@
 fastapi[standard]== 0.115.12
 uvicorn[standard]==0.31.0         # adjust if needed
 sqlalchemy==2.0.34              # example stable/latest LTS
-psycopg2-binary==2.9.10    # works well with many setups
+psycopg2==2.9.10    # works well with many setups
+bcrypt==3.2.2
 passlib[bcrypt]==1.7.4
 python-jose==3.3.0
 python-multipart==0.0.20
@@ -30,5 +31,3 @@ sentencepiece==0.2.0
 sacremoses==0.1.1
 torch==2.6
 google-cloud-storage==2.18.2
-transformers==4.55.1
-kombu==5.5.4
