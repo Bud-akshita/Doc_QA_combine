@@ -133,13 +133,6 @@ def upload_to_gcs(file: UploadFile, destination_blob_name: str):
     except Exception as e:
         logging.error(f"Unexpected error during upload: {e}", exc_info=True)
         raise RuntimeError(f"Unexpected error during upload: {e}") from e
-    finally:
-        # Always clean up the temp file if it was created
-        try:
-            if 'tmp_path' in locals() and os.path.exists(tmp_path):
-                os.remove(tmp_path)
-        except Exception as cleanup_error:
-            logging.warning(f"Failed to clean up temp file: {cleanup_error}")
 
 def download_from_gcs(user_id: int, file_name: str) -> str:
     """Download a file from GCS to /tmp and return local path"""
