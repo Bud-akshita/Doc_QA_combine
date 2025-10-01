@@ -227,31 +227,39 @@ async def upload_doc(
     doc_type: str = Form(...),            
     user: dict = Depends(get_current_user)
 ):
-    file_name = file.filename
+    try:
+        file_name = file.filename
 
-    # Upload file directly to GCS
-    gcs_uri = upload_to_gcs(file, f"{user['id']}/{file_name}")
+        # Upload file directly to GCS
+        gcs_uri = upload_to_gcs(file, f"{user['id']}/{file_name}")
 
-    # Save in database
-    new_doc = Documents(
-        user_id=user["id"],
-        doc_name=file_name,
-        doc_type=doc_type
-    )
-    db.add(new_doc)
-    db.commit()
-    db.refresh(new_doc)
+        # Save in database
+        new_doc = Documents(
+            user_id=user["id"],
+            doc_name=file_name,
+            doc_type=doc_type
+        )
+        db.add(new_doc)
+        db.commit()
+        db.refresh(new_doc)
 
-    # Instead of local file_path, download from GCS if needed
-    # e.g., process file contents
-    # For now, use temp file download if required
-    tmp_download = tempfile.NamedTemporaryFile(delete=False).name
-    storage.Client().bucket(UPLOAD_BUCKET).blob(f"{user['id']}/{file_name}").download_to_filename(tmp_download)
+        # Instead of local file_path, download from GCS if needed
+        # e.g., process file contents
+        # For now, use temp file download if required
+        tmp_download = tempfile.NamedTemporaryFile(delete=False).name
+        storage.Client().bucket(UPLOAD_BUCKET).blob(f"{user['id']}/{file_name}").download_to_filename(tmp_download)
 
-    document = extract_content(tmp_download)
-    build_vectorstore_simple(document, file_name,VECTORESTORE_BUCKET,user["id"])
+        document = extract_content(tmp_download)
+        build_vectorstore_simple(document, file_name,VECTORESTORE_BUCKET,user["id"])
 
-    return new_doc
+        return new_doc
+    
+    except Exception as e:
+        logging.error("failed : ",e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"failed to upload : {str(e)}"
+        )
 
 @router.delete("/delete")
 async def delete_doc(doc_name: str, doc_type: str, db: db_dependency, user: dict = Depends(get_current_user)):

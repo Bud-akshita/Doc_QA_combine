@@ -19,6 +19,7 @@ from google.cloud import storage
 import tempfile
 import shutil
 from huggingface_hub import login
+import logging
 
 login(token=os.environ.get("HF_TOKEN"))
 
@@ -47,18 +48,34 @@ def upload_vectorstore_to_gcs(local_path: str, bucket_name: str, dest_prefix: st
     """
     Uploads all files from a local vector store folder to GCS under dest_prefix.
     """
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-    
-    for root, _, files in os.walk(local_path):
-        for file in files:
-            local_file_path = os.path.join(root, file)
-            # Compute blob name relative to dest_prefix
-            rel_path = os.path.relpath(local_file_path, local_path)
-            blob_name = os.path.join(dest_prefix, rel_path)
-            blob = bucket.blob(blob_name)
-            blob.upload_from_filename(local_file_path)
-    print(f"Vector store uploaded to gs://{bucket_name}/{dest_prefix}/")
+    try :
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        
+        for root, _, files in os.walk(local_path):
+            for file in files:
+                local_file_path = os.path.join(root, file)
+                # Compute blob name relative to dest_prefix
+                rel_path = os.path.relpath(local_file_path, local_path)
+                blob_name = os.path.join(dest_prefix, rel_path)
+                blob = bucket.blob(blob_name)
+                blob.upload_from_filename(local_file_path)
+        print(f"Vector store uploaded to gs://{bucket_name}/{dest_prefix}/")
+    except gcs_exceptions.NotFound as e:
+        logging.error(f"GCS resource not found: {e}")
+        raise RuntimeError(f"GCS resource not found: {e}") from e
+    except gcs_exceptions.Forbidden as e:
+        logging.error(f"Permission denied when accessing GCS: {e}")
+        raise RuntimeError(f"Permission denied when accessing GCS: {e}") from e
+    except gcs_exceptions.GoogleAPICallError as e:
+        logging.error(f"GCS API error: {e}")
+        raise RuntimeError(f"GCS API error: {e}") from e
+    except (OSError, IOError) as e:
+        logging.error(f"File handling error: {e}")
+        raise RuntimeError(f"File handling error: {e}") from e
+    except Exception as e:
+        logging.error(f"Unexpected error during upload: {e}", exc_info=True)
+        raise RuntimeError(f"Unexpected error during upload: {e}") from e
 
 def download_vectorstore_from_gcs(bucket_name: str, prefix: str) -> str:
     """
@@ -191,6 +208,8 @@ def build_vectorstore_simple(document, file_name, bucket_name, user_id):
         upload_vectorstore_to_gcs(store_dir, bucket_name, dest_prefix)
         shutil.rmtree(store_dir, ignore_errors=True)
         print(f"Vector store uploaded to gs://{bucket_name}/{dest_prefix}/")
+
+    logging.info("vectorestore created")
     
     return index, chunks, metadata
 
