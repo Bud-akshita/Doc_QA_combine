@@ -111,7 +111,8 @@ def upload_to_gcs(file: UploadFile, destination_blob_name: str):
 
         # Save file temporarily before uploading to GCS
         tmp_path = f"/tmp/{file.filename}"
-        file.save(tmp_path)
+        with open(tmp_path, "wb") as buffer:
+            buffer.write(file.file.read())
 
         blob.upload_from_filename(tmp_path)
 
