@@ -42,7 +42,7 @@ router = APIRouter(
 )
 
 UPLOAD_BUCKET = "my_bucket_upload"
-VECTORESTORE_BUCKET ="my_vectorestre_bucket"
+VECTORESTORE_BUCKET ="my_vectorestore_bucket"
 
 embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 # groq_api_key='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'
