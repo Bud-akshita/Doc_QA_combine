@@ -13,8 +13,8 @@ from googletrans import Translator
 import re
 import pytz
 from google.cloud import storage
-import tempfile
 import logging
+import tempfile
 from google.api_core import exceptions as gcs_exceptions
 
 import traceback
@@ -110,9 +110,8 @@ def upload_to_gcs(file: UploadFile, destination_blob_name: str):
         blob = bucket.blob(destination_blob_name)
 
         # Save file temporarily before uploading to GCS
-        with tempfile.NamedTemporaryFile(delete=False) as tmp:
-            shutil.copyfileobj(file.file, tmp)
-            tmp_path = tmp.name
+        tmp_path = f"/tmp/{file.filename}"
+        file.save(tmp_path)
 
         blob.upload_from_filename(tmp_path)
 
@@ -243,19 +242,14 @@ async def upload_doc(
         db.commit()
         db.refresh(new_doc)
 
-        # Instead of local file_path, download from GCS if needed
-        # e.g., process file contents
-        # For now, use temp file download if required
-        tmp_download = tempfile.NamedTemporaryFile(delete=False).name
-        storage.Client().bucket(UPLOAD_BUCKET).blob(f"{user['id']}/{file_name}").download_to_filename(tmp_download)
-        logging.info("Extracting content from file: %s (temp path: %s)", file_name, tmp_download)
-        document = extract_content(tmp_download)
+        tmp_path = f"/tmp/{file.filename}"
+        document = extract_content(tmp_path)
         build_vectorstore_simple(document, file_name,VECTORESTORE_BUCKET,user["id"])
 
         return new_doc
     
     except Exception as e:
-        logging.error("failed : ",e)
+        logging.error("failed : {}",e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"failed to upload : {str(e)}"
