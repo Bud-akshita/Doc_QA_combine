@@ -14,6 +14,8 @@ import re
 import pytz
 from google.cloud import storage
 import tempfile
+import logging
+from google.api_core import exceptions as gcs_exceptions
 
 import traceback
 from langchain_community.vectorstores import FAISS
@@ -102,17 +104,42 @@ class EmailRequest(BaseModel):
     subject: str
 
 def upload_to_gcs(file: UploadFile, destination_blob_name: str):
-    client = storage.Client()
-    bucket = client.bucket(UPLOAD_BUCKET)
-    blob = bucket.blob(destination_blob_name)
+    try:
+        client = storage.Client()
+        bucket = client.bucket(UPLOAD_BUCKET)
+        blob = bucket.blob(destination_blob_name)
 
-    # Save file temporarily before uploading to GCS
-    with tempfile.NamedTemporaryFile(delete=False) as tmp:
-        shutil.copyfileobj(file.file, tmp)
-        tmp_path = tmp.name
+        # Save file temporarily before uploading to GCS
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            shutil.copyfileobj(file.file, tmp)
+            tmp_path = tmp.name
 
-    blob.upload_from_filename(tmp_path)
-    return f"gs://{UPLOAD_BUCKET}/{destination_blob_name}"
+        blob.upload_from_filename(tmp_path)
+
+        return f"gs://{UPLOAD_BUCKET}/{destination_blob_name}"
+
+    except gcs_exceptions.NotFound as e:
+        logging.error(f"GCS resource not found: {e}")
+        raise RuntimeError(f"GCS resource not found: {e}") from e
+    except gcs_exceptions.Forbidden as e:
+        logging.error(f"Permission denied when accessing GCS: {e}")
+        raise RuntimeError(f"Permission denied when accessing GCS: {e}") from e
+    except gcs_exceptions.GoogleAPICallError as e:
+        logging.error(f"GCS API error: {e}")
+        raise RuntimeError(f"GCS API error: {e}") from e
+    except (OSError, IOError) as e:
+        logging.error(f"File handling error: {e}")
+        raise RuntimeError(f"File handling error: {e}") from e
+    except Exception as e:
+        logging.error(f"Unexpected error during upload: {e}", exc_info=True)
+        raise RuntimeError(f"Unexpected error during upload: {e}") from e
+    finally:
+        # Always clean up the temp file if it was created
+        try:
+            if 'tmp_path' in locals() and os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception as cleanup_error:
+            logging.warning(f"Failed to clean up temp file: {cleanup_error}")
 
 def download_from_gcs(user_id: int, file_name: str) -> str:
     """Download a file from GCS to /tmp and return local path"""
