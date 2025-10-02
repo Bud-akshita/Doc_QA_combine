@@ -404,7 +404,7 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
             index, chunks, metadata = load_vectorstore_simple(VECTORESTORE_BUCKET,prefix=f"{user['id']}/{filename}/")
 
             # Optionally, delete temp folder after loading
-            shutil.rmtree(store_path, ignore_errors=True)
+            # shutil.rmtree(store_path, ignore_errors=True)
             results = similarity_search(question, index, chunks, metadata, k=22)
             print(metadata)
             context, chunk_map, ref_map= build_context(results)
@@ -703,10 +703,10 @@ async def ask_question_hindi(
             
             # vectors = build_faiss_index(content, embedding_model)
             # best_chunks = retrieve_best_chunks(question, vectors)
-            store_path = download_vectore_from_gcs(user["id"], filename)
-            index, chunks, metadata = load_vectorstore_simple(,store_path)
+            # store_path = download_vectore_from_gcs(user["id"], filename)
+            index, chunks, metadata = load_vectorstore_simple(VECTORESTORE_BUCKET,prefix=f"{user['id']}/{filename}/")
             # Optionally, delete temp folder after loading
-            shutil.rmtree(store_path, ignore_errors=True)
+            # shutil.rmtree(store_path, ignore_errors=True)
             results = similarity_search(question, index, chunks, metadata, k=22)
             print(metadata)
             context, chunk_map, ref_map= build_context(results)    
