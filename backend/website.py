@@ -191,6 +191,9 @@ def scrap(url):
     
     return saved_text
 
+def safe_text(text: str) -> str:
+    return text.encode("latin-1", "ignore").decode("latin-1")
+
 def scraped_data_to_pdf(saved_text, base_url, bucket_name=None):
     
     domain = urlparse(base_url).netloc.replace("www.", "").split(".")[0]
@@ -209,7 +212,7 @@ def scraped_data_to_pdf(saved_text, base_url, bucket_name=None):
         pdf.ln(5)
         pdf.set_font_size(11)
         clean_text = re.sub(r'\s+', ' ', text).strip()
-        pdf.multi_cell(0, 8, clean_text)
+        pdf.multi_cell(0, 8, safe_text(clean_text))
 
     # Output PDF to the BytesIO buffer
     pdf.output(pdf_buffer)

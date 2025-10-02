@@ -434,10 +434,27 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
                 "chat": chat_history,
                 "ref_map": ref_map
             }
-        except Exception as e:
+        except FileNotFoundError as e:
+            logging.error(f"File not found: {e}")
+            raise HTTPException(status_code=404, detail=f"File not found: {str(e)}")
+
+        except ConnectionError as e:
+            logging.error(f"Connection error: {e}")
+            raise HTTPException(status_code=503, detail="Service unavailable, please retry later")
+
+        except ValueError as e:
+            logging.error(f"Value error: {e}")
+            raise HTTPException(status_code=400, detail=f"Bad input: {str(e)}")
+        
+        except HTTPException as e:
             # Log traceback to console for debugging
             traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+        
+        except Exception as e:
+            logging.error(f"Unexpected error: {e}")
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"Unexpected server error: {str(e)}")
     
 @router.get("/history/{document_name}", response_model=List[ChatHistoryWithDocumentResponse])
 async def get_chat_history_by_document(
@@ -582,8 +599,28 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
 
             return {"summary": answer}
 
-        except Exception as e:
+        except FileNotFoundError as e:
+            logging.error(f"File not found: {e}")
+            raise HTTPException(status_code=404, detail="Source file not found")
+
+        except KeyError as e:
+            logging.error(f"Missing key in response: {e}")
+            raise HTTPException(status_code=500, detail=f"Response format error: missing {str(e)}")
+
+        except ValueError as e:
+            logging.error(f"Value error: {e}")
+            raise HTTPException(status_code=400, detail=f"Bad data: {str(e)}")
+
+        except ConnectionError as e:
+            logging.error(f"Connection error: {e}")
+            raise HTTPException(status_code=503, detail="Service unavailable, please retry later")
+
+        except HTTPException as e:  
             raise HTTPException(status_code=500, detail=str(e))
+        
+        except Exception as e:
+            logging.error("Unexpected error occurred: {e}")
+            raise HTTPException(status_code=500, detail="Unexpected server error")
     
 @router.post("/ask-question-hi")
 async def ask_question_hindi(
