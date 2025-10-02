@@ -199,8 +199,6 @@ def scraped_data_to_pdf(saved_text, base_url, bucket_name=None):
     domain = urlparse(base_url).netloc.replace("www.", "").split(".")[0]
     pdf_name = f"{domain}.pdf"
 
-    # Create PDF in memory
-    pdf_buffer = BytesIO()
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_font("Arial", size=12)
@@ -215,8 +213,8 @@ def scraped_data_to_pdf(saved_text, base_url, bucket_name=None):
         pdf.multi_cell(0, 8, safe_text(clean_text))
 
     # Output PDF to the BytesIO buffer
-    pdf.output(pdf_buffer)
-    pdf_buffer.seek(0)
+    pdf_bytes = pdf.output(dest="S").encode("latin1")
+    pdf_buffer = BytesIO(pdf_bytes)
 
     # Upload to GCS
     if bucket_name:
