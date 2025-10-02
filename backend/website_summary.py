@@ -6,6 +6,7 @@ import json
 from collections import defaultdict
 from google.cloud import storage
 import tempfile
+import os
 
 UPLOAD_BUCKET = "my_upload_bucket"
 
@@ -176,7 +177,7 @@ def summary():
             return None
     
     # Load URL mapping
-    url_mapping = load_url_mapping()
+    url_mapping = load_url_mapping_gcs()
     
     # Get all documents
     all_docs = vectorstore.docstore._dict.values()
