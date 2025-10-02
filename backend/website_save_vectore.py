@@ -9,6 +9,8 @@ from google.cloud import storage
 import tempfile
 import shutil
 import os
+import pickle
+import io
 
 # Embedding model wrapper for LangChain
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -132,22 +134,22 @@ def save_vectore(pdf):
     
     # Build index
     vectorstore, url_mapping = build_faiss_index(page_texts, chunk_size=800, chunk_overlap=100)
+    index_buffers = {}
     
-    # Save index locally first
-    local_dir = tempfile.mkdtemp()
-    vectorstore.save_local(local_dir)
-    
-    # Upload FAISS index directory to GCS
+    for filename, obj in vectorstore.index_files.items():
+        buf = io.BytesIO()
+        pickle.dump(obj, buf)
+        buf.seek(0)
+        index_buffers[filename] = buf
+
+    # Upload each buffer to GCS
     storage_client = storage.Client()
-    bucket = storage_client.bucket(UPLOAD_BUCKET)
-    
-    for root, _, files in os.walk(local_dir):
-        for filename in files:
-            local_path = os.path.join(root, filename)
-            relative_path = os.path.relpath(local_path, local_dir)
-            blob = bucket.blob(f"faiss_index_directory/{relative_path}")
-            blob.upload_from_filename(local_path)
-    
+    bucket = storage_client.bucket(bucket_name)
+
+    for filename, buf in index_buffers.items():
+        blob = bucket.blob(f"faiss_index/{filename}")
+        blob.upload_from_file(buf, rewind=True)
+
     print("FAISS index uploaded successfully to GCS!")
     print(f"URL mapping: {url_mapping}")
 
