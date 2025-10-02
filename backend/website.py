@@ -17,7 +17,7 @@ from io import BytesIO
 
 from google.cloud import storage
 
-bucket_name = 'my_upload_bucket'
+bucket_name = 'my_bucket_upload'
 
 router = APIRouter(
     prefix="/website",

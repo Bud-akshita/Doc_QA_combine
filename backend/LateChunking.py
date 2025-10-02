@@ -256,7 +256,7 @@ def similarity_search(query, index, chunks, metadata, k=25):
     print(results)
     return results
 
-def load_vectorstore_simple(bucket_name=None, prefix=None):
+def load_vectorstore_simple(bucket_name, prefix):
     """
     Load vector store. If bucket_name and prefix are provided, download from GCS first.
     """
