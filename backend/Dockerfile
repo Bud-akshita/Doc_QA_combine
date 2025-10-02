@@ -81,6 +81,8 @@ RUN cat requirements.txt
 RUN python -m pip install --upgrade pip \
     && python -m pip install -r requirements.txt
 
+RUN python -m spacy download en_core_web_trf
+
 # Copy the rest of the application code
 COPY . .
 

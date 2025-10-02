@@ -180,7 +180,7 @@ def scrap(url):
 def safe_text(text: str) -> str:
     return text.encode("latin-1", "ignore").decode("latin-1")
 
-def scraped_data_to_pdf(saved_text, base_url, bucket_name=None):
+def scraped_data_to_pdf(saved_text, base_url, bucket_name, user_id):
     
     domain = urlparse(base_url).netloc.replace("www.", "").split(".")[0]
     pdf_name = f"{domain}.pdf"
@@ -206,7 +206,8 @@ def scraped_data_to_pdf(saved_text, base_url, bucket_name=None):
     if bucket_name:
         client = storage.Client()
         bucket = client.bucket(bucket_name)
-        blob = bucket.blob(pdf_name)
+        blob_path = f"{user_id}/{pdf_name}"
+        blob = bucket.blob(blob_path)
         blob.upload_from_file(pdf_buffer, content_type="application/pdf")
         return blob.public_url  # returns the GCS public URL
 
@@ -239,7 +240,7 @@ async def scrape_endpoint(
             raise HTTPException(status_code=500, detail="No data could be scraped from the website")
         
         # Convert to PDF
-        gcs_url = scraped_data_to_pdf(data, url, bucket_name=bucket_name)
+        gcs_url = scraped_data_to_pdf(data, url, bucket_name, current_user["id"])
         pdf_filename = gcs_url.split("/")[-1]  # get file name from URL
         
         # Save document information to database
