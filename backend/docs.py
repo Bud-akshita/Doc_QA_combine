@@ -476,7 +476,7 @@ async def get_chat_history_by_document(
     return [ChatHistoryWithDocumentResponse.from_orm(h) for h in history]
 
 @router.post("/summary")
-async def generate_summary(filename :str = Form(...),document_type: str = Form(...)):
+async def generate_summary(filename :str = Form(...),document_type: str = Form(...), user:dict =Depends(get_current_user)):
     file_path = download_from_gcs(user["id"], filename)
     
     if document_type=='website':
@@ -655,10 +655,10 @@ async def ask_question_hindi(
             )
             
             vectors=save_vectore(file_path)
-            best_chunks = retrieve_best_chunks(question, vectors)
+            best_chunks = retrieve_best_chunks(english_question, vectors)
             context, chunk_map, ref_map= build_context_web(best_chunks)
             print(ref_map)
-            final_prompt = prompt.format(context=context, input=question)
+            final_prompt = prompt.format(context=context, input=english_question)
             response = llm.invoke(final_prompt)
             result = response.content
             answer = replace_refs_web(result,chunk_map)
@@ -710,7 +710,7 @@ async def ask_question_hindi(
             results = similarity_search(question, index, chunks, metadata, k=22)
             print(metadata)
             context, chunk_map, ref_map= build_context(results)    
-            final_prompt = prompt.format(context=context, input=question)
+            final_prompt = prompt.format(context=context, input=english_question)
             response = llm.invoke(final_prompt)
             result = response.content
             print(result)

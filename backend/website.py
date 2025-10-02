@@ -28,20 +28,6 @@ headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 }
 
-def upload_pdf_to_gcs(local_path: str, bucket_name: str, dest_blob_name: str) -> str:
-    """
-    Uploads a local PDF to GCS and returns the GCS URL.
-    """
-    client = storage.Client()
-    bucket = client.bucket(bucket_name)
-    blob = bucket.blob(dest_blob_name)
-    blob.upload_from_filename(local_path)
-
-    # Make it publicly accessible (optional)
-    blob.make_public()
-
-    return blob.public_url  # or return f"gs://{bucket_name}/{dest_blob_name}"
-
 def is_file_url(url):
     """
     Check if URL points to a file (image, document, etc.)
@@ -222,7 +208,6 @@ def scraped_data_to_pdf(saved_text, base_url, bucket_name=None):
         bucket = client.bucket(bucket_name)
         blob = bucket.blob(pdf_name)
         blob.upload_from_file(pdf_buffer, content_type="application/pdf")
-        blob.make_public()  # optional
         return blob.public_url  # returns the GCS public URL
 
     # Fallback (should not happen)
