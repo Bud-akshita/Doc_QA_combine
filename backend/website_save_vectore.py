@@ -8,6 +8,7 @@ import json
 from google.cloud import storage
 import tempfile
 import shutil
+import os
 
 # Embedding model wrapper for LangChain
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")

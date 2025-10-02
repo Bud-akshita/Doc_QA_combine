@@ -223,6 +223,16 @@ async def upload_doc(
     try:
         file_name = file.filename
 
+        existing_doc = db.query(Documents).filter(
+            Documents.user_id == user["id"],
+            Documents.doc_name == file_name
+        ).first()
+
+        if existing_doc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="You have already uploaded this file."
+            )
         # Upload file directly to GCS
         gcs_uri = upload_to_gcs(file, f"{user['id']}/{file_name}")
 
