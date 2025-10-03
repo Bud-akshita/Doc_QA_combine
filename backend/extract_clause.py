@@ -59,7 +59,8 @@ Return results strictly in JSON format as a flat list of objects:
 ]
 """
 
-UPLOAD_BUCKET = "my_bucket_upload"   # your bucket name
+UPLOAD_BUCKET = "my_bucket_upload"   
+TMP_DIR = "/tmp"
 
 def save_to_gcs(local_path: str, gcs_path: str):
     """Upload a local file to GCS"""
@@ -77,8 +78,7 @@ def extract(vectorstore, user_id: int):
     print(f"Total chunks to process: {total_chunks}")
     print(f"Processing in batches of {BATCH_SIZE}")
 
-    # Use /tmp for temp storage
-    tmp_clauses_path = os.path.join(tempfile.gettempdir(), "clauses.json")
+    tmp_clauses_path = os.path.join(TMP_DIR, "clauses.json")
 
     # Start fresh each time
     if os.path.exists(tmp_clauses_path):
@@ -123,7 +123,7 @@ def extract(vectorstore, user_id: int):
     cleaned_data = re.sub(r"\{[^{}]*\{", "{", cleaned_data)
     cleaned_data = re.sub(r",+", ",", cleaned_data)
 
-    tmp_clean_path = os.path.join(tempfile.gettempdir(), "clean.json")
+    tmp_clean_path = os.path.join(TMP_DIR, "clean.json")
     with open(tmp_clean_path, "w", encoding="utf-8") as f:
         f.write(cleaned_data)
 
