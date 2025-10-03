@@ -5,7 +5,6 @@ import re
 import json
 from collections import defaultdict
 from google.cloud import storage
-import tempfile
 import os
 
 UPLOAD_BUCKET = "my_upload_bucket"
@@ -32,7 +31,7 @@ def load_faiss_index_from_gcs():
     storage_client = storage.Client()
     bucket = storage_client.bucket(UPLOAD_BUCKET)
     
-    temp_dir = tempfile.mkdtemp()
+    temp_dir = "/tmp"
     
     blobs = bucket.list_blobs(prefix="faiss_index_directory/")
     for blob in blobs:
@@ -156,25 +155,25 @@ def create_final_summary(batch_summaries):
     
     return "\n\n".join(final_output)
 
-def summary():
+def summary(vectorstore):
     """Main summarization function"""
     print("Loading FAISS index...")
     
     # Try to load improved index first, then fall back to original
-    try:
-        load_faiss_index_from_gcs()
-        print("Loaded improved FAISS index")
-    except:
-        try:
-            vectorstore = FAISS.load_local(
-                "faiss_index_directory",
-                embeddings,
-                allow_dangerous_deserialization=True
-            )
-            print("Loaded original FAISS index")
-        except Exception as e:
-            print(f"Error loading FAISS index: {e}")
-            return None
+    # try:
+    #     load_faiss_index_from_gcs()
+    #     print("Loaded improved FAISS index")
+    # except:
+    #     try:
+    #         vectorstore = FAISS.load_local(
+    #             "faiss_index_directory",
+    #             embeddings,
+    #             allow_dangerous_deserialization=True
+    #         )
+    #         print("Loaded original FAISS index")
+    #     except Exception as e:
+    #         print(f"Error loading FAISS index: {e}")
+    #         return None
     
     # Load URL mapping
     url_mapping = load_url_mapping_gcs()
