@@ -19,5 +19,6 @@ celery_app.conf.update(
     task_always_eager=False, 
     task_eager_propagates=False,
     worker_prefetch_multiplier = 1,
-    task_acks_late = True
+    task_acks_late = True,
+    broker_pool_limit=None
 )
