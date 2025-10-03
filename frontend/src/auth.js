@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState , useEffect } from "react";
 import { Eye, EyeOff, Lock, Mail, LogIn, UserPlus } from "lucide-react";
 import "./auth.css"; 
-import DocumentManager from "./DocumentManager"
+import DocumentManager from "./DocumentManager";
+import { getBackendUrl } from "./utils/getBackendUrl";
 
 const AuthComponent = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -14,9 +15,21 @@ const AuthComponent = () => {
   const [message, setMessage] = useState({ text: "", type: "" });
   const [token, setToken] = useState(null);
   const [userData, setUserData] = useState(null);
+  const [API_BASE_URL, setApiBaseUrl] = useState("");
+  // ... other state
 
-  // API base URL - adjust this to match your FastAPI server
-  const API_BASE_URL = "http://localhost:8000";
+  // Fetch backend URL on mount
+  useEffect(() => {
+    const fetchUrl = async () => {
+      try {
+        const url = await getBackendUrl();
+        setApiBaseUrl(url);
+      } catch (error) {
+        console.error("Failed to get backend URL:", error);
+      }
+    };
+    fetchUrl();
+  }, []);
 
   const handleInputChange = (e) => {
     setFormData({

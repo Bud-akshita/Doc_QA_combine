@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { getBackendUrl } from "../utils/getBackendUrl";
 import {
   X,
   Bell,
@@ -46,9 +47,9 @@ const SmartReminder = ({
   onClose,
   selectedDocument,
   documents,
-  token,
-  API_BASE_URL,
+    token,
 }) => {
+  const [API_BASE_URL, setApiBaseUrl] = useState("");
   const [reminderData, setReminderData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setTimedMessage] = useTimedMessage();
@@ -57,6 +58,19 @@ const SmartReminder = ({
   const [globalNotificationDays, setGlobalNotificationDays] = useState(1);
   const [showDaysInput, setShowDaysInput] = useState(false);
   const [schedulingReminders, setSchedulingReminders] = useState(false);
+
+  useEffect(() => {
+    const fetchUrl = async () => {
+      try {
+        const url = await getBackendUrl();
+        setApiBaseUrl(url);
+      } catch (error) {
+        console.error("Failed to fetch backend URL:", error);
+      }
+    };
+
+    fetchUrl();
+  }, []);
 
   // Parse the reminder data from API response
   const parseReminderData = (dataString) => {

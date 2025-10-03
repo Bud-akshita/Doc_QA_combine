@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState , useEffect} from "react";
 import { X, AlertTriangle, Eye, Loader2 } from "lucide-react";
+import { getBackendUrl } from "../utils/getBackendUrl";
 
 const RiskModal = ({
   show,
@@ -8,24 +9,24 @@ const RiskModal = ({
   loadingRisk,
   onViewReference,
   token,
-  API_BASE_URL,
 }) => {
+  const [API_BASE_URL, setApiBaseUrl] = useState("");
   const [expandedRisks, setExpandedRisks] = useState(new Set());
   const [loadingReferences, setLoadingReferences] = useState(new Set());
 
-  if (!show) return null;
-
-  const toggleRiskExpansion = (index) => {
-    setExpandedRisks((prev) => {
-      const newExpanded = new Set(prev);
-      if (newExpanded.has(index)) {
-        newExpanded.delete(index);
-      } else {
-        newExpanded.add(index);
+  // Fetch backend URL on mount
+  useEffect(() => {
+    const fetchUrl = async () => {
+      try {
+        const url = await getBackendUrl();
+        setApiBaseUrl(url);
+      } catch (error) {
+        console.error("Failed to fetch backend URL:", error);
       }
-      return newExpanded;
-    });
-  };
+    };
+
+    fetchUrl();
+  }, []);
 
   const handleViewReference = async (refId, riskIndex) => {
     setLoadingReferences((prev) => new Set(prev).add(`${riskIndex}-${refId}`));

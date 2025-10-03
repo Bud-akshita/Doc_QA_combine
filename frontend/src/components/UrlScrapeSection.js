@@ -1,19 +1,35 @@
-import React, { useState } from "react";
+import React, { useState , useEffect} from "react";
 import { Globe, Download, Loader2, AlertCircle } from "lucide-react";
+import { getBackendUrl } from "../utils/getBackendUrl";
 
-const UrlScrapeSection = ({ 
-  token, 
-  API_BASE_URL, 
-  onScrapeSuccess, 
-  message, 
-  setMessage 
-}) => {
+const UrlScrapeSection = ({ token, onScrapeSuccess, message, setMessage }) => {
+  const [API_BASE_URL, setApiBaseUrl] = useState("");
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // Fetch backend URL when component mounts
+  useEffect(() => {
+    const fetchUrl = async () => {
+      try {
+        const url = await getBackendUrl();
+        setApiBaseUrl(url);
+      } catch (error) {
+        console.error("Failed to fetch backend URL:", error);
+        setMessage({ text: "Backend URL not available", type: "error" });
+      }
+    };
+
+    fetchUrl();
+  }, [setMessage]);
+
   const handleScrapeUrl = async (e) => {
     e.preventDefault();
-    
+
+    if (!API_BASE_URL) {
+      setMessage({ text: "Backend URL not loaded yet", type: "error" });
+      return;
+    }
+
     if (!url.trim()) {
       setMessage({ text: "Please enter a URL", type: "error" });
       return;
@@ -44,15 +60,14 @@ const UrlScrapeSection = ({
         // Extract filename from Content-Disposition header first
         const contentDisposition = response.headers.get("Content-Disposition");
         let filename = null;
-        
+
         if (contentDisposition) {
-          // Try different patterns for Content-Disposition header
           const patterns = [
-            /filename\*=UTF-8''([^;]+)/,  // RFC 5987
-            /filename="([^"]+)"/,         // Standard quoted
-            /filename=([^;]+)/            // Standard unquoted
+            /filename\*=UTF-8''([^;]+)/,
+            /filename="([^"]+)"/,
+            /filename=([^;]+)/
           ];
-          
+
           for (const pattern of patterns) {
             const match = contentDisposition.match(pattern);
             if (match) {
@@ -61,48 +76,36 @@ const UrlScrapeSection = ({
             }
           }
         }
-        
-        // If no filename from header, generate from URL
+
         if (!filename) {
           try {
-            const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
-            const domain = urlObj.hostname.replace('www.', '').split('.')[0];
+            const urlObj = new URL(url.startsWith("http") ? url : `https://${url}`);
+            const domain = urlObj.hostname.replace("www.", "").split(".")[0];
             filename = `${domain}.pdf`;
           } catch (error) {
-            // Final fallback - use a generic name with timestamp
             filename = `website_${Date.now()}.pdf`;
             console.warn("Could not parse URL for filename:", error);
           }
         }
 
-        // Create blob from response
         const blob = await response.blob();
-        
-        // Create download link
         const downloadUrl = window.URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = downloadUrl;
         link.download = filename;
-        
-        // Append to body, click, and remove
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        
-        // Clean up the blob URL
         window.URL.revokeObjectURL(downloadUrl);
 
         setMessage({
           text: `Website data gathered and converted to PDF successfully! File: ${filename}`,
           type: "success",
         });
-        
-        setUrl(""); // Clear the input
-        
-        // Call the success callback to refresh documents
-        if (onScrapeSuccess) {
-          onScrapeSuccess();
-        }
+
+        setUrl(""); // Clear input
+
+        if (onScrapeSuccess) onScrapeSuccess();
       } else {
         const errorData = await response.json().catch(() => ({}));
         const errorMessage = errorData.detail || "Failed to get data from website";

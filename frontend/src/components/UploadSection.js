@@ -1,13 +1,28 @@
-import React, { useState, useRef } from "react";
+import React, { useEffect,useState, useRef } from "react";
 import { Upload, X } from "lucide-react";
 import { formatFileSize } from "../utils/formatUtils";
+import { getBackendUrl } from "../utils/getBackendUrl";
 
-const UploadSection = ({ token, API_BASE_URL, onUploadSuccess, message, setMessage }) => {
+const UploadSection = ({ token, onUploadSuccess, message, setMessage }) => {
+  const [API_BASE_URL, setApiBaseUrl] = useState("");
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [docType, setDocType] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    const fetchUrl = async () => {
+      try {
+        const url = await getBackendUrl();
+        setApiBaseUrl(url);
+      } catch (error) {
+        console.error("Failed to fetch backend URL:", error);
+      }
+    };
+
+    fetchUrl();
+  }, []);
 
   const handleUpload = async () => {
     if (!selectedFile || !docType) {
@@ -95,9 +110,8 @@ const UploadSection = ({ token, API_BASE_URL, onUploadSuccess, message, setMessa
       )}
 
       <div
-        className={`upload-area ${dragOver ? "drag-over" : ""} ${
-          selectedFile ? "has-file" : ""
-        }`}
+        className={`upload-area ${dragOver ? "drag-over" : ""} ${selectedFile ? "has-file" : ""
+          }`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}

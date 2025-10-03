@@ -11,6 +11,7 @@ import RiskModal from "./components/riskmodal";
 import ReferenceModal from "./components/referencemodal";
 import SmartReminder from "./components/SmartReminder";
 import "./docs.css";
+import { getBackendUrl } from "./utils/getBackendUrl";
 
 const DocumentManager = ({ token, onLogout }) => {
   // Existing state management
@@ -52,9 +53,20 @@ const DocumentManager = ({ token, onLogout }) => {
   const [summaryMessage, setSummaryMessage] = useTimedMessage({ text: "", type: "" });
   const [scrapeMessage, setScrapeMessage] = useTimedMessage({ text: "", type: "" });
   const [riskMessage, setRiskMessage] = useTimedMessage({ text: "", type: "" });
-
-  const API_BASE_URL = "http://localhost:8000";
-
+  const [API_BASE_URL, setApiBaseUrl] = useState("");
+  
+    useEffect(() => {
+      const fetchUrl = async () => {
+        try {
+          const url = await getBackendUrl();
+          setApiBaseUrl(url);
+        } catch (error) {
+          console.error("Failed to get backend URL:", error);
+        }
+      };
+      fetchUrl();
+    }, []);
+  
   // NEW: Start high-risk analysis in background
   const startHighRiskAnalysis = async (docName, docType) => {
     try {
