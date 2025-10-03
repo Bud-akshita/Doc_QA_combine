@@ -64,6 +64,7 @@ TMP_DIR = "/tmp"
 
 def save_to_gcs(local_path: str, gcs_path: str):
     """Upload a local file to GCS"""
+    storage_client = storage.Client()
     bucket = storage_client.bucket(UPLOAD_BUCKET)
     blob = bucket.blob(gcs_path)
     blob.upload_from_filename(local_path)

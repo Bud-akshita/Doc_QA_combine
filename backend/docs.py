@@ -490,7 +490,7 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
     file_path = download_from_gcs(user["id"], filename)
     
     if document_type=='website':
-        vectorstore = ave_vectore(file_path)
+        vectorstore = save_vectore(file_path)
         answer = summary(vectorstore)
         return {"summary":answer}
     else:
