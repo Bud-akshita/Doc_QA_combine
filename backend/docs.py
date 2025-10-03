@@ -490,8 +490,8 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
     file_path = download_from_gcs(user["id"], filename)
     
     if document_type=='website':
-        save_vectore(file_path)
-        answer = summary()
+        vectorstore = ave_vectore(file_path)
+        answer = summary(vectorstore)
         return {"summary":answer}
     else:
         try:        
@@ -823,7 +823,7 @@ async def start_high_risk(
 async def get_high_risk_result(filename: str):
     if filename not in risk_results:
         return {"status": "processing", "message": "Analysis still running..."}
-    
+    print(risk_results)
     return {
         "status": "done",
         "high_risk_clauses": risk_results[filename]

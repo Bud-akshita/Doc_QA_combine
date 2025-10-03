@@ -176,7 +176,7 @@ def summary(vectorstore):
     #         return None
     
     # Load URL mapping
-    url_mapping = load_url_mapping_gcs()
+    # url_mapping = load_url_mapping_gcs()
     
     # Get all documents
     all_docs = vectorstore.docstore._dict.values()
