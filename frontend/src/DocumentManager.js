@@ -55,18 +55,18 @@ const DocumentManager = ({ token, onLogout }) => {
   const [riskMessage, setRiskMessage] = useTimedMessage({ text: "", type: "" });
   const [API_BASE_URL, setApiBaseUrl] = useState("");
   
-    useEffect(() => {
-      const fetchUrl = async () => {
-        try {
-          const url = await getBackendUrl();
-          setApiBaseUrl(url);
-        } catch (error) {
-          console.error("Failed to get backend URL:", error);
-        }
-      };
-      fetchUrl();
-    }, []);
-  
+  useEffect(() => {
+    const fetchUrl = async () => {
+      try {
+        const url = await getBackendUrl();
+        setApiBaseUrl(url);
+      } catch (error) {
+        console.error("Failed to get backend URL:", error);
+      }
+    };
+    fetchUrl();
+  }, []);
+
   // NEW: Start high-risk analysis in background
   const startHighRiskAnalysis = async (docName, docType) => {
     try {
@@ -330,7 +330,9 @@ const DocumentManager = ({ token, onLogout }) => {
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/documents`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `Bearer ${token}`, 
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',},
         cache: "no-store",
       });
 
