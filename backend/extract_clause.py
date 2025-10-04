@@ -6,8 +6,16 @@ import re
 import os
 from google.cloud import storage
 import tempfile
+import random
 
-client = Groq(api_key="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")
+API_KEYS = [
+    "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",
+    "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",
+]
+
+api_key = random.choice(API_KEYS)
+
+client = Groq(api_key=api_key)
 
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
