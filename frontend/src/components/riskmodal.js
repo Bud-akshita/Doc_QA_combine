@@ -1,4 +1,4 @@
-import React, { useState , useEffect} from "react";
+import React, { useState, useEffect } from "react";
 import { X, AlertTriangle, Eye, Loader2 } from "lucide-react";
 import { getBackendUrl } from "../utils/getBackendUrl";
 
@@ -27,6 +27,19 @@ const RiskModal = ({
 
     fetchUrl();
   }, []);
+
+  if (!show) return null;
+  const toggleRiskExpansion = (index) => {
+    setExpandedRisks((prev) => {
+      const newExpanded = new Set(prev); 
+      if (newExpanded.has(index)) {
+        newExpanded.delete(index);
+      } else {
+        newExpanded.add(index);
+      }
+      return newExpanded;
+    });
+  };
 
   const handleViewReference = async (refId, riskIndex) => {
     setLoadingReferences((prev) => new Set(prev).add(`${riskIndex}-${refId}`));
