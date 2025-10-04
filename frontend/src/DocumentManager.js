@@ -329,7 +329,7 @@ const DocumentManager = ({ token, onLogout }) => {
   const fetchDocuments = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/documents`, {
+      const res = await fetch(`${API_BASE_URL}documents`, {
         headers: { Authorization: `Bearer ${token}`, 
         'Accept': 'application/json',
         'Content-Type': 'application/json',},
