@@ -8,8 +8,20 @@ import auth
 import docs
 import website
 from auth import get_current_user
+from scheduler import process_email_queue
+import threading
 
 app = FastAPI()
+
+def scheduler_loop():
+    while True:
+        process_email_queue()
+        time.sleep(60)
+
+@app.on_event("startup")
+def start_scheduler():
+    t = threading.Thread(target=scheduler_loop, daemon=True)
+    t.start()
 
 # Add CORS middleware
 app.add_middleware(

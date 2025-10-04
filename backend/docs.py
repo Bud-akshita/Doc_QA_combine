@@ -33,7 +33,7 @@ from translation import save_pdf, translate_to_hindi
 from extract_clause import extract
 from risk_level import find_high_risk_clauses , get_reference_chunk
 from smart_reminder import sentences_with_date_entity,call_lm
-from tasks import send_email, cancel_scheduled_email
+from schedular import send_email, cancel_scheduled_email
 from LateChunking import build_vectorstore_simple, load_vectorstore_simple, similarity_search
 
 router = APIRouter(
@@ -882,19 +882,29 @@ async def schedule_email(req: EmailRequest, user: dict = Depends(get_current_use
         ist = pytz.timezone("Asia/Kolkata")
         send_datetime = ist.localize(send_datetime)
 
-        # Create body dynamically (example)
+        # Create body dynamically
         body = f"This is a reminder: {req.subject} on {formatted_date}. " \
                f"We are notifying you {req.days} days before."
 
-        # Schedule Celery task
-        task = send_email.apply_async(
-            args=[req.subject, body, user['email']],
-            eta=send_datetime
-        )
+        # Generate a unique task ID
+        import uuid
+        task_id = str(uuid.uuid4())
+
+        # Store task in Redis with timestamp
+        task = {
+            "task_id": task_id,
+            "subject": req.subject,
+            "body": body,
+            "to_email": user["email"],
+            "send_timestamp": send_datetime.timestamp()
+        }
+
+        import json
+        r.rpush("email_queue", json.dumps(task))
 
         return {
             "status": "scheduled",
-            "task_id": task.id,
+            "task_id": task_id,
             "scheduled_for": send_datetime.strftime("%d-%b-%Y %H:%M:%S")
         }
 
@@ -903,10 +913,17 @@ async def schedule_email(req: EmailRequest, user: dict = Depends(get_current_use
 
 @router.delete("/cancel-email/{task_id}")
 async def cancel_email(task_id: str):
-    print(task_id)
-    result = cancel_scheduled_email(task_id)
+    import json
+    removed = 0
+    all_tasks = r.lrange("email_queue", 0, -1)
     
-    if result["status"] == "success":
+    for task_json in all_tasks:
+        task = json.loads(task_json)
+        if task.get("task_id") == task_id:
+            r.lrem("email_queue", 1, task_json)
+            removed += 1
+
+    if removed > 0:
         return {
             "status": "success",
             "message": f"Email task {task_id} has been cancelled",
@@ -915,6 +932,6 @@ async def cancel_email(task_id: str):
     else:
         return {
             "status": "error",
-            "message": result["message"],
+            "message": f"No email task found with id {task_id}",
             "task_id": task_id
         }
