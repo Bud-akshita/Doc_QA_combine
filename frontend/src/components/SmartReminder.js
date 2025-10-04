@@ -298,7 +298,7 @@ const SmartReminder = ({
 
     try {
       const formData = new FormData();
-      formData.append("file", selectedDocument);
+      formData.append("filename", selectedDocument);
       formData.append("doc_type", selectedDoc.doc_type);
 
       const response = await fetch(`${API_BASE_URL}/documents/smart-reminder`, {
