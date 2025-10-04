@@ -331,6 +331,7 @@ const DocumentManager = ({ token, onLogout }) => {
     try {
       const res = await fetch(`${API_BASE_URL}/documents`, {
         headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
       });
 
       if (res.ok) {
