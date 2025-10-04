@@ -864,6 +864,12 @@ async def extract_dates(filename: str = Form(...),doc_type: str = Form(...),user
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
 
+from datetime import datetime, time, timedelta
+import pytz
+from fastapi import APIRouter, Depends
+
+router = APIRouter()
+
 @router.post("/schedule-email")
 async def schedule_email(req: EmailRequest, user: dict = Depends(get_current_user)):
     try:
@@ -871,8 +877,8 @@ async def schedule_email(req: EmailRequest, user: dict = Depends(get_current_use
         event_date = datetime.strptime(req.date, "%d-%m-%Y")
         formatted_date = event_date.strftime("%d-%b-%Y")
 
-        # Set fixed time 
-        fixed_time = time(15,10)  
+        # Set fixed time
+        fixed_time = time(15, 10)
         event_datetime = datetime.combine(event_date, fixed_time)
 
         # Subtract days
@@ -882,24 +888,34 @@ async def schedule_email(req: EmailRequest, user: dict = Depends(get_current_use
         ist = pytz.timezone("Asia/Kolkata")
         send_datetime = ist.localize(send_datetime)
 
-        # Create body dynamically (example)
+        # Create body dynamically
         body = f"This is a reminder: {req.subject} on {formatted_date}. " \
                f"We are notifying you {req.days} days before."
 
-        # Schedule Celery task
-        task = send_email.apply_async(
-            args=[req.subject, body, user['email']],
-            eta=send_datetime
-        )
+        now_ist = datetime.now(ist)
+
+        if send_datetime <= now_ist:
+            # If send_datetime is in the past, send immediately
+            task = send_email.apply_async(
+                args=[req.subject, body, user['email']]
+            )
+            scheduled_for = now_ist
+        else:
+            # Schedule for future
+            task = send_email.apply_async(
+                args=[req.subject, body, user['email']],
+                eta=send_datetime
+            )
+            scheduled_for = send_datetime
 
         return {
             "status": "scheduled",
             "task_id": task.id,
-            "scheduled_for": send_datetime.strftime("%d-%b-%Y %H:%M:%S")
+            "scheduled_for": scheduled_for.strftime("%d-%b-%Y %H:%M:%S")
         }
 
     except Exception as e:
-        return {"status": "error", "message": str(e)}  
+        return {"status": "error", "message": str(e)}
 
 @router.delete("/cancel-email/{task_id}")
 async def cancel_email(task_id: str):
