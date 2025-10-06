@@ -5,7 +5,7 @@ import json
 import time
 import redis
 
-REDIS_URL = os.environ.get(REDIS_URL)
+REDIS_URL = os.environ.get("REDIS_URL")
 r = redis.from_url(REDIS_URL)
 
 EMAIL_QUEUE = "email_queue"
