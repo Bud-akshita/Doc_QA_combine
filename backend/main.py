@@ -15,7 +15,10 @@ app = FastAPI()
 
 def scheduler_loop():
     while True:
-        process_email_queue()
+        try:
+            process_email_queue()
+        except Exception as e:
+            print(f"Error in scheduler_loop: {e}")
         time.sleep(60)
 
 @app.on_event("startup")

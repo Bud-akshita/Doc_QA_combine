@@ -52,6 +52,7 @@ def process_email_queue():
 
     for task_json in all_tasks:
         task = json.loads(task_json)
+        print(task)
         send_ts = task.get("send_timestamp", 0)
 
         if send_ts <= current_ts:
@@ -59,3 +60,9 @@ def process_email_queue():
             r.lrem(EMAIL_QUEUE, 1, task_json)  # remove from queue after sending
         else:
             tasks_to_keep.append(task_json)  # not ready yet
+
+# if __name__ == "__main__":
+#     print("Email scheduler started...")
+#     while True:
+#         process_email_queue()
+#         time.sleep(10)  # check every 10 seconds
