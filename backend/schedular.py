@@ -59,18 +59,3 @@ def process_email_queue():
             r.lrem(EMAIL_QUEUE, 1, task_json)  # remove from queue after sending
         else:
             tasks_to_keep.append(task_json)  # not ready yet
-
-def cancel_scheduled_email(task_id):
-    removed = 0
-    all_tasks = r.lrange(EMAIL_QUEUE, 0, -1)
-
-    for task_json in all_tasks:
-        task = json.loads(task_json)
-        if task.get("task_id") == task_id:
-            r.lrem(EMAIL_QUEUE, 1, task_json)
-            removed += 1
-
-    if removed > 0:
-        return {"status": "success", "task_id": task_id, "message": "Email task cancelled"}
-    else:
-        return {"status": "error", "task_id": task_id, "message": "Task not found"}

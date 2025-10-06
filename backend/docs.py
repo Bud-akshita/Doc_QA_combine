@@ -33,7 +33,6 @@ from translation import save_pdf, translate_to_hindi
 from extract_clause import extract
 from risk_level import find_high_risk_clauses , get_reference_chunk
 from smart_reminder import sentences_with_date_entity,call_lm
-from schedular import cancel_scheduled_email
 from LateChunking import build_vectorstore_simple, load_vectorstore_simple, similarity_search
 import redis
 
