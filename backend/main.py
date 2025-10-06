@@ -8,7 +8,7 @@ import auth
 import docs
 import website
 from auth import get_current_user
-from scheduler import process_email_queue
+from schedular import process_email_queue
 import threading
 
 app = FastAPI()
