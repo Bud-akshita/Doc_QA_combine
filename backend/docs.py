@@ -33,8 +33,9 @@ from translation import save_pdf, translate_to_hindi
 from extract_clause import extract
 from risk_level import find_high_risk_clauses , get_reference_chunk
 from smart_reminder import sentences_with_date_entity,call_lm
-from schedular import send_email, cancel_scheduled_email
+from schedular import cancel_scheduled_email
 from LateChunking import build_vectorstore_simple, load_vectorstore_simple, similarity_search
+import redis
 
 router = APIRouter(
     prefix="/documents",
@@ -48,6 +49,9 @@ embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 # groq_api_key='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'
 groq_api_key ='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'
 llm=ChatGroq(groq_api_key=groq_api_key,model_name="llama-3.1-8b-instant")
+
+REDIS_URL = os.environ.get("REDIS_URL")
+r = redis.from_url(REDIS_URL)
 
 risk_vectors = None
 
