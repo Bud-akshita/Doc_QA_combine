@@ -5,69 +5,83 @@ import io
 import zipfile
 from langchain_community.document_loaders import Docx2txtLoader, TextLoader
 from langchain.schema import Document
+import concurrent.futures
+import time
 
-def extract_content(file_path):
-    all_docs = []
+def process_pdf_page(page_num, page):
+    """Processes a single PDF page: extracts text and OCRs images."""
+    page_text = page.get_text("text").strip()
+    images = page.get_images(full=True)
 
-    if file_path.endswith("pdf"):
-        doc = fitz.open(file_path)
-        all_docs = []
-
-        for page_num in range(len(doc)):
-            page = doc[page_num]
-            page_text = page.get_text("text")
-
-            images = page.get_images(full=True)
-            ocr_texts = []
-            for img_index, img in enumerate(images):
-                xref = img[0]
-                base_image = doc.extract_image(xref)
-                image_bytes = base_image["image"]
+    # Case 1: Text + Images (Hybrid)
+    if page_text and images:
+        ocr_texts = []
+        for img_index, img in enumerate(images):
+            xref = img[0]
+            base_image = page.parent.extract_image(xref)
+            image_bytes = base_image["image"]
+            try:
                 image = Image.open(io.BytesIO(image_bytes))
                 ocr_text = pytesseract.image_to_string(image)
                 if ocr_text.strip():
                     ocr_texts.append(ocr_text)
+            except Exception as e:
+                print(f"Skipping image {img_index}: {e}")
 
-            merged_text = page_text + "\n" + "\n".join(ocr_texts)
-            all_docs.append(merged_text.strip())
+        merged = page_text + "\n" + "\n".join(ocr_texts)
+        return page_num, merged.strip()
 
-        if not any(text.strip() for text in all_docs):
-            page_texts = []
-            for page_num in range(len(doc)):
-                print("using ocr on full page")
-                page = doc[page_num]
-                pix = page.get_pixmap(dpi=200)
-                img = Image.open(io.BytesIO(pix.tobytes("png")))
-                text = pytesseract.image_to_string(img)
-                page_texts.append(text.strip())
-            return page_texts 
-        return all_docs
+    # Case 2: Text only
+    elif page_text:
+        return page_num, page_text
 
-    elif file_path.endswith('docx'):
+    # Case 3: Image only
+    else:
+        pix = page.get_pixmap(dpi=300)
+        image = Image.open(io.BytesIO(pix.tobytes("png")))
+        text = pytesseract.image_to_string(image)
+        return page_num, text.strip()
+
+
+def extract_content(file_path):
+    if file_path.endswith("pdf"):
+        doc = fitz.open(file_path)
+        num_pages = len(doc)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+            # Submit tasks with page number
+            futures = [executor.submit(process_pdf_page, i, doc.load_page(i)) for i in range(num_pages)]
+
+            # Collect results
+            results = [f.result() for f in futures]
+
+        # Sort results by page number to preserve page order
+        results_sorted = [text for page_num, text in sorted(results, key=lambda x: x[0])]
+        return results_sorted
+
+    elif file_path.endswith("docx"):
         loader = Docx2txtLoader(file_path)
-        text_docs = loader.load()  # list[Document] from PDF text
-        
-        ocr_docs = []  # list to store OCR-based Document objects
+        text_docs = loader.load()
+
+        ocr_docs = []
         with zipfile.ZipFile(file_path, 'r') as z:
-            # Images live under word/media/
             for name in z.namelist():
                 if name.startswith("word/media/") and not name.endswith("/"):
                     image_data = z.read(name)
                     try:
                         image = Image.open(io.BytesIO(image_data))
-                    except Exception as e:
-                        continue  # skip unreadable
-                    ocr_text = pytesseract.image_to_string(image).strip()
-                    
-                    if ocr_text.strip():  # only add if OCR found text
-                        ocr_docs.append(Document(page_content=ocr_text))
-                        
-        all_docs = text_docs + ocr_docs
-        return all_docs  
-        
+                        ocr_text = pytesseract.image_to_string(image).strip()
+                        if ocr_text:
+                            ocr_docs.append(Document(page_content=ocr_text))
+                    except Exception:
+                        continue
+
+        return text_docs + ocr_docs
+
     elif file_path.endswith("txt"):
         loader = TextLoader(file_path)
         docs = loader.load()
         return [docs[0].page_content]
+
     else:
         raise ValueError("Unsupported file type for reading content.")
