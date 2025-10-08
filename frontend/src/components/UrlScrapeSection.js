@@ -1,4 +1,4 @@
-import React, { useState , useEffect} from "react";
+import React, { useState, useEffect } from "react";
 import { Globe, Download, Loader2, AlertCircle } from "lucide-react";
 import { getBackendUrl } from "../utils/getBackendUrl";
 
@@ -7,18 +7,16 @@ const UrlScrapeSection = ({ token, onScrapeSuccess, message, setMessage }) => {
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Fetch backend URL when component mounts
   useEffect(() => {
     const fetchUrl = async () => {
       try {
-        const url = await getBackendUrl();
-        setApiBaseUrl(url);
+        const backendUrl = await getBackendUrl();
+        setApiBaseUrl(backendUrl);
       } catch (error) {
         console.error("Failed to fetch backend URL:", error);
         setMessage({ text: "Backend URL not available", type: "error" });
       }
     };
-
     fetchUrl();
   }, [setMessage]);
 
@@ -36,7 +34,8 @@ const UrlScrapeSection = ({ token, onScrapeSuccess, message, setMessage }) => {
     }
 
     // Basic URL validation
-    const urlPattern = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
+    const urlPattern =
+      /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?$/;
     if (!urlPattern.test(url.trim())) {
       setMessage({ text: "Please enter a valid URL", type: "error" });
       return;
@@ -56,61 +55,62 @@ const UrlScrapeSection = ({ token, onScrapeSuccess, message, setMessage }) => {
         }
       );
 
-      if (response.ok) {
-        // Extract filename from Content-Disposition header first
-        const contentDisposition = response.headers.get("Content-Disposition");
-        let filename = null;
-
-        if (contentDisposition) {
-          const patterns = [
-            /filename\*=UTF-8''([^;]+)/,
-            /filename="([^"]+)"/,
-            /filename=([^;]+)/
-          ];
-
-          for (const pattern of patterns) {
-            const match = contentDisposition.match(pattern);
-            if (match) {
-              filename = decodeURIComponent(match[1]);
-              break;
-            }
-          }
-        }
-
-        if (!filename) {
-          try {
-            const urlObj = new URL(url.startsWith("http") ? url : `https://${url}`);
-            const domain = urlObj.hostname.replace("www.", "").split(".")[0];
-            filename = `${domain}.pdf`;
-          } catch (error) {
-            filename = `website_${Date.now()}.pdf`;
-            console.warn("Could not parse URL for filename:", error);
-          }
-        }
-
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = downloadUrl;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(downloadUrl);
-
-        setMessage({
-          text: `Website data gathered and converted to PDF successfully! File: ${filename}`,
-          type: "success",
-        });
-
-        setUrl(""); // Clear input
-
-        if (onScrapeSuccess) onScrapeSuccess();
-      } else {
+      if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.detail || "Failed to get data from website";
+        const errorMessage =
+          errorData.detail || "Failed to get data from website";
         setMessage({ text: errorMessage, type: "error" });
+        setIsLoading(false);
+        return;
       }
+
+      // ✅ Extract filename from Content-Disposition header
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = "website_data.pdf";
+
+      if (contentDisposition) {
+        const patterns = [
+          /filename\*=UTF-8''([^;]+)/,
+          /filename="([^"]+)"/,
+          /filename=([^;]+)/,
+        ];
+        for (const pattern of patterns) {
+          const match = contentDisposition.match(pattern);
+          if (match) {
+            filename = decodeURIComponent(match[1]);
+            break;
+          }
+        }
+      } else {
+        try {
+          const urlObj = new URL(
+            url.startsWith("http") ? url : `https://${url}`
+          );
+          const domain = urlObj.hostname.replace("www.", "").split(".")[0];
+          filename = `${domain}.pdf`;
+        } catch {
+          filename = `website_${Date.now()}.pdf`;
+        }
+      }
+
+      // ✅ Convert response to blob and auto-download
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(downloadUrl);
+
+      setMessage({
+        text: `Website data converted to PDF and downloaded successfully: ${filename}`,
+        type: "success",
+      });
+
+      setUrl("");
+      if (onScrapeSuccess) onScrapeSuccess();
     } catch (error) {
       console.error("Scrape error:", error);
       setMessage({
@@ -128,7 +128,7 @@ const UrlScrapeSection = ({ token, onScrapeSuccess, message, setMessage }) => {
         <Globe className="section-icon" />
         <h3>Get Data From Website</h3>
       </div>
-      
+
       <form onSubmit={handleScrapeUrl} className="url-scrape-form">
         <div className="url-input-group">
           <input
@@ -169,8 +169,13 @@ const UrlScrapeSection = ({ token, onScrapeSuccess, message, setMessage }) => {
       <div className="scrape-info">
         <h4>How it works:</h4>
         <ul>
-          <li>The PDF with website data will be automatically downloaded and added to your documents</li>
-          <li>You can then ask questions about the website content</li>
+          <li>
+            The website content will be gathered and automatically downloaded as
+            a PDF.
+          </li>
+          <li>
+            The document will also be stored in your account for future use.
+          </li>
         </ul>
       </div>
     </div>
