@@ -179,12 +179,18 @@ def scrap(url):
 
 def safe_text(text: str) -> str:
     return text.encode("latin-1", "ignore").decode("latin-1")
-
-def scraped_data_to_pdf(saved_text, base_url, bucket_name, user_id):
-    
+def scraped_data_to_pdf(saved_text, base_url, user_id):
+    """Create PDF, store it in /tmp, and upload to GCS"""
     domain = urlparse(base_url).netloc.replace("www.", "").split(".")[0]
     pdf_name = f"{domain}.pdf"
 
+    # Create local /tmp folder
+    tmp_dir = "/tmp"
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    pdf_path = os.path.join(tmp_dir, pdf_name)
+
+    # Create PDF
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.set_font("Arial", size=12)
@@ -198,21 +204,27 @@ def scraped_data_to_pdf(saved_text, base_url, bucket_name, user_id):
         clean_text = re.sub(r'\s+', ' ', text).strip()
         pdf.multi_cell(0, 8, safe_text(clean_text))
 
-    # Output PDF to the BytesIO buffer
-    pdf_bytes = pdf.output(dest="S").encode("latin1")
-    pdf_buffer = BytesIO(pdf_bytes)
+    # Save PDF locally
+    pdf.output(pdf_path)
 
     # Upload to GCS
-    if bucket_name:
+    gcs_url = None
+    try:
         client = storage.Client()
         bucket = client.bucket(bucket_name)
         blob_path = f"{user_id}/{pdf_name}"
         blob = bucket.blob(blob_path)
-        blob.upload_from_file(pdf_buffer, content_type="application/pdf")
-        return blob.public_url  # returns the GCS public URL
 
-    # Fallback (should not happen)
-    return None
+        # Upload local file to GCS
+        blob.upload_from_filename(pdf_path, content_type="application/pdf")
+
+        # Optionally make it public (or keep private if using IAM)
+        gcs_url = blob.public_url
+    except Exception as e:
+        print(f"[WARN] GCS upload failed: {e}")
+
+    return pdf_path, pdf_name, gcs_url
+
 
 @router.get("/scrape")
 async def scrape_endpoint(
@@ -220,7 +232,7 @@ async def scrape_endpoint(
     url: str = Query(..., description="URL to scrape"),
     current_user: dict = Depends(get_current_user),
 ):
-    """API endpoint for website scraping"""
+    """API endpoint for website scraping — saves PDF locally + uploads to GCS"""
     try:
         # Ensure URL has a scheme
         if not url.startswith(('http://', 'https://')):
@@ -231,38 +243,38 @@ async def scrape_endpoint(
         if not parsed_url.netloc:
             raise HTTPException(status_code=400, detail="Invalid URL provided")
         
-        # Run scraping in a separate thread to avoid async issues
+        # Run scraping
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future = executor.submit(scrap, url)
-            data = future.result(timeout=300)  # 5 minute timeout
+            data = future.result(timeout=300)
         
         if not data:
             raise HTTPException(status_code=500, detail="No data could be scraped from the website")
         
-        # Convert to PDF
-        gcs_url = scraped_data_to_pdf(data, url, bucket_name, current_user["id"])
-        pdf_filename = gcs_url.split("/")[-1]  # get file name from URL
+        # Generate PDF (local + upload)
+        pdf_path, pdf_filename, gcs_url = scraped_data_to_pdf(data, url, current_user["id"])
         
-        # Save document information to database
+        # Save record in DB
         document = Documents(
-            user_id=current_user['id'],  # Get user_id from current user
-            doc_name=pdf_filename,       # PDF file name
-            doc_type="website"           # Set doc_type as "website"
-            # uploaded_at is automatically set by server_default=func.now()
+            user_id=current_user['id'],
+            doc_name=pdf_filename,
+            doc_type="website"
         )
-        
         db.add(document)
         db.commit()
         db.refresh(document)
-        
-        # Return the file response
-        return {"pdf_url": gcs_url, "doc_name": pdf_filename}
-        
+
+        # Return FileResponse + GCS info
+        return FileResponse(
+            path=pdf_path,
+            filename=pdf_filename,
+            media_type="application/pdf"
+        )
+
     except concurrent.futures.TimeoutError:
         raise HTTPException(status_code=504, detail="Scraping operation timed out")
     except HTTPException:
         raise
     except Exception as e:
-        # Rollback in case of error
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Scraping failed: {str(e)}")
