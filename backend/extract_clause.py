@@ -5,7 +5,6 @@ from groq import Groq
 import re
 import os
 from google.cloud import storage
-import tempfile
 import random
 
 API_KEYS = [
@@ -58,7 +57,7 @@ OUTPUT FORMAT RULES:
 USER_TEMPLATE = """
 Analyze this document text and extract all legal and important clauses: text : {context}
 
-Return results strictly in JSON format as a flat list of objects:
+Return results strictly in JSON format as a flat list of objects no other information:
 [
   {{
     "clause": "...",
@@ -66,7 +65,7 @@ Return results strictly in JSON format as a flat list of objects:
   }}
 ]
 """
-
+MAX_RETRIES = 2
 UPLOAD_BUCKET = "my_bucket_upload"   
 TMP_DIR = "/tmp"
 
@@ -88,48 +87,67 @@ def extract(vectorstore, user_id: int):
     print(f"Processing in batches of {BATCH_SIZE}")
 
     tmp_clauses_path = os.path.join(TMP_DIR, "clauses.json")
-
-    # Start fresh each time
-    if os.path.exists(tmp_clauses_path):
-        os.remove(tmp_clauses_path)
-
     for batch_start in range(0, total_chunks, BATCH_SIZE):
         batch_end = min(batch_start + BATCH_SIZE, total_chunks)
         current_batch = all_chunks[batch_start:batch_end]
-
+        
         print(f"\nProcessing batch {batch_start//BATCH_SIZE + 1}: chunks {batch_start + 1}-{batch_end}")
-
+        
         context = ""
         for doc in current_batch:
             content = doc.page_content
             meta = doc.metadata
             meta_str = f"pg{meta.get('page_number', 0)}ck{meta.get('chunk_index', 0)}"
             context += f"Content: {content}\n[REF]: {meta_str} [REF]\n"
-
-        print(f"Context length for this batch: {len(context)} characters")
-
+        
         prompt = USER_TEMPLATE.format(context=context)
 
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[
-                {"role": "system", "content": SYSTEM_INSTRUCTIONS},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=6000,
-            temperature=0.1
-        )
+        attempt = 0
+        success = False
+        while attempt < MAX_RETRIES and not success:
+            attempt += 1
+            response = client.chat.completions.create(
+                model="llama-3.1-8b-instant", 
+                messages=[
+                    {"role": "system", "content": SYSTEM_INSTRUCTIONS},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=6000,
+                temperature=0.1
+            )
 
-        # Append results to tmp file
-        with open(tmp_clauses_path, "a", encoding="utf-8") as f:
-            f.write(response.choices[0].message.content)
+            raw_response = response.choices[0].message.content.strip()
+
+            try:
+                parsed_json = json.loads(raw_response)
+                if (
+                    isinstance(parsed_json, list)
+                    and all(
+                        isinstance(item, dict)
+                        and "clause" in item
+                        and "REF" in item
+                        and isinstance(item["clause"], str)
+                        and isinstance(item["REF"], str)
+                        for item in parsed_json
+                    )
+                ):
+                    with open(tmp_clauses_path, "a", encoding="utf-8") as f:
+                        json.dump(parsed_json, f, ensure_ascii=False)
+                    print(f"✅ Valid JSON appended for batch {batch_start//BATCH_SIZE + 1} on attempt {attempt}")
+                    success = True
+                else:
+                    print(f"⚠️ Batch {batch_start//BATCH_SIZE + 1} attempt {attempt} returned non-list, retrying...")
+            except json.JSONDecodeError:
+                print(f"❌ Invalid JSON in batch {batch_start//BATCH_SIZE + 1} attempt {attempt}, retrying...")
+
+        if not success:
+            print(f"⚠️ Failed to get valid JSON after {MAX_RETRIES} attempts for batch {batch_start//BATCH_SIZE + 1}")
 
     # Post-process
     with open(tmp_clauses_path, "r", encoding="utf-8") as f:
         data = f.read()
 
     cleaned_data = data.replace("][", ",")
-    cleaned_data = re.sub(r"\{[^{}]*\{", "{", cleaned_data)
     cleaned_data = re.sub(r",+", ",", cleaned_data)
 
     tmp_clean_path = os.path.join(TMP_DIR, "clean.json")
