@@ -52,8 +52,6 @@ llm=ChatGroq(groq_api_key=groq_api_key,model_name="llama-3.1-8b-instant")
 REDIS_URL = os.environ.get("REDIS_URL")
 r = redis.from_url(REDIS_URL)
 
-risk_vectors = None
-
 class DocumentResponse(BaseModel):
     id: int
     user_id: int
@@ -797,6 +795,7 @@ async def translate_file(filename: str):
         raise HTTPException(status_code=500, detail=str(e))
     
 risk_results = {}
+risk_vectores = {}
 
 def run_high_risk(filename: str, doc_type: str,user):
     global risk_vectors
@@ -804,11 +803,11 @@ def run_high_risk(filename: str, doc_type: str,user):
     file_path = download_from_gcs(user["id"], filename)
     content = extract_content(file_path)
 
-    risk_vectors = build_faiss_index(content, embedding_model)
+    risk_vectors[(user["id"], filename)] = build_faiss_index(content, embedding_model)
     extract(risk_vectors,user["id"])
     high_risk_clauses = find_high_risk_clauses(doc_type,user["id"])
 
-    risk_results[filename] = high_risk_clauses
+    risk_results[(user["id"], filename)] = high_risk_clauses
 
 
 @router.post("/high-risk-start")
@@ -833,15 +832,14 @@ async def get_high_risk_result(filename: str):
     }
 
 @router.get("/get-reference/{ref}")
-async def get_reference(ref: str):
- 
-    global risk_vectors 
+async def get_reference(ref: str, filename: str, user: dict = Depends(get_current_user)):
 
     try:
-        reference_info = get_reference_chunk(risk_vectors,ref)
-        
-        if not reference_info:
-            raise HTTPException(status_code=404, detail="Reference not found")
+        key = (user["id"], filename)
+        vector = risk_vectors.get(key)
+        if not vector:
+            raise HTTPException(status_code=404, detail="No risk vectors found for this file")
+        reference_info = get_reference_chunk(vector, ref)
         
         return{
             "success": True,
