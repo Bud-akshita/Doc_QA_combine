@@ -822,15 +822,17 @@ async def start_high_risk(
 
 
 @router.get("/high-risk-result/{filename}")
-async def get_high_risk_result(filename: str):
-    if filename not in risk_results:
+async def get_high_risk_result(filename: str, user: dict = Depends(get_current_user)):
+    key = (user["id"], filename)
+
+    if key not in risk_results:
         return {"status": "processing", "message": "Analysis still running..."}
-    print(risk_results)
+
     return {
         "status": "done",
-        "high_risk_clauses": risk_results[filename]
+        "high_risk_clauses": risk_results[key]
     }
-
+    
 @router.get("/get-reference/{ref}")
 async def get_reference(ref: str, filename: str, user: dict = Depends(get_current_user)):
 
