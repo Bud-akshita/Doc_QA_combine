@@ -795,7 +795,7 @@ async def translate_file(filename: str):
         raise HTTPException(status_code=500, detail=str(e))
     
 risk_results = {}
-risk_vectores = {}
+risk_vectors = {}
 
 def run_high_risk(filename: str, doc_type: str,user):
     global risk_vectors
@@ -840,7 +840,7 @@ async def get_reference(ref: str, filename: str, user: dict = Depends(get_curren
         if not vector:
             raise HTTPException(status_code=404, detail="No risk vectors found for this file")
         reference_info = get_reference_chunk(vector, ref)
-        
+
         return{
             "success": True,
             "reference": ref,
