@@ -22,7 +22,7 @@ embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
 
 SYSTEM_INSTRUCTIONS = """You are an expert legal clause extractor specializing in agreements.
 
-Extract only legal clauses from the provided text, focusing on:
+Extract only legal clauses from the provided text do not include definition clause, focusing on:
 - Penalties 
 - Obligations 
 - Exclusions 
@@ -57,7 +57,7 @@ OUTPUT FORMAT RULES:
 - Strictly only return a flat array of objects
 """
 USER_TEMPLATE = """
-Analyze this document text and extract all legal and important clauses: text : {context}
+Analyze this document text and extract legal and important clauses: text : {context}
 
 Return results strictly in JSON format as a flat list of objects no other information:
 [

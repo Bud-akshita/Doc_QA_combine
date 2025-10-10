@@ -2,7 +2,7 @@ from database import db_dependency
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, status, HTTPException, Depends , UploadFile , File , Form
 from fastapi.responses import FileResponse
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks , Query
 from models import Documents, ChatHistory
 from typing import List
 from auth import get_current_user
@@ -795,15 +795,15 @@ async def translate_file(filename: str):
         raise HTTPException(status_code=500, detail=str(e))
     
 risk_results = {}
-risk_vectors = {}
 
 def run_high_risk(filename: str, doc_type: str,user):
 
-    file_path = download_from_gcs(user["id"], filename)
-    content = extract_content(file_path)
+    # file_path = download_from_gcs(user["id"], filename)
+    # content = extract_content(file_path)
 
-    risk_vectors[(user["id"], filename)] = build_faiss_index(content, embedding_model)
-    extract(risk_vectors[(user["id"], filename)],user["id"],filename)
+    # risk_vectors[(user["id"], filename)] = build_faiss_index(content, embedding_model)
+    vectorstor = download_vectore_from_gcs(user["id"],filename)
+    extract(vectorstor,user["id"],filename)
     high_risk_clauses = find_high_risk_clauses(doc_type,user["id"],filename)
 
     risk_results[(user["id"], filename)] = high_risk_clauses
@@ -821,23 +821,39 @@ async def start_high_risk(
 
 
 @router.get("/high-risk-result/{filename}")
-async def get_high_risk_result(filename: str, user: dict = Depends(get_current_user)):
+async def get_high_risk_result(
+    filename: str,
+    doc_type: str = Query(...),  # <- doc_type comes from frontend
+    user: dict = Depends(get_current_user)
+):
     key = (user["id"], filename)
 
     if key not in risk_results:
-        return {"status": "processing", "message": "Analysis still running..."}
+        # Check if file is actually finished in GCS
+        storage_client = storage.Client()
+        bucket = storage_client.bucket("my_bucket_upload")
+        blob = bucket.blob(f"{user['id']}/{filename}/clean.json")
 
-    return {
-        "status": "done",
-        "high_risk_clauses": risk_results[key]
-    }
-    
+        if blob.exists():
+            # File is done but memory was cleared
+            from extract_clause import find_high_risk_clauses
+            high_risk_clauses = find_high_risk_clauses(doc_type, user["id"])
+            risk_results[key] = high_risk_clauses
+            return {"status": "done", "high_risk_clauses": high_risk_clauses}
+
+        # Restart the background job
+        background_tasks = BackgroundTasks()
+        background_tasks.add_task(run_high_risk, filename, doc_type, user)
+        return {"status": "restarted", "message": "Previous task lost; restarting analysis."}
+
+    return {"status": "done", "high_risk_clauses": risk_results[key]}
+        
 @router.get("/get-reference/{filename}/{ref}")
 async def get_reference(filename: str, ref: str, user: dict = Depends(get_current_user)):
 
     try:
         key = (user["id"], filename)
-        vector = risk_vectors.get(key)
+        vector = download_vectore_from_gcs(user["id"],filename)
         if not vector:
             raise HTTPException(status_code=404, detail="No risk vectors found for this file")
         reference_info = get_reference_chunk(vector, ref)
