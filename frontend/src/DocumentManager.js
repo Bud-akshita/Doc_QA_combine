@@ -738,6 +738,7 @@ const DocumentManager = ({ token, onLogout }) => {
         onViewReference={handleViewReferenceFromRisk}
         token={token}
         API_BASE_URL={API_BASE_URL}
+        filename={selectedDocuments[0]}
       />
 
       <ReferenceModal

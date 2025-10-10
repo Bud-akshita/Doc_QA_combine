@@ -9,6 +9,7 @@ const RiskModal = ({
   loadingRisk,
   onViewReference,
   token,
+  filename,
 }) => {
   const [API_BASE_URL, setApiBaseUrl] = useState("");
   const [expandedRisks, setExpandedRisks] = useState(new Set());
@@ -46,7 +47,7 @@ const RiskModal = ({
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/documents/get-reference/${refId}`,
+        `${API_BASE_URL}/documents/get-reference/${encodeURIComponent(filename)}/${encodeURIComponent(refId)}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
