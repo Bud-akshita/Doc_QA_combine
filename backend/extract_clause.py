@@ -90,6 +90,7 @@ def extract(vectorstore, user_id: int,filename : str):
 
     job_id = f"{user_id}_{filename}_{uuid.uuid4().hex[:6]}"
     job_dir = os.path.join(TMP_DIR, job_id)
+    os.makedirs(job_dir, exist_ok=True)
 
     tmp_clauses_path = os.path.join(job_dir, "clauses.json")
     for batch_start in range(0, total_chunks, BATCH_SIZE):
