@@ -192,7 +192,7 @@ def get_reference_chunk(vectorstore,ref: str) -> Optional[Dict]:
         print(f"Error retrieving reference {ref}: {str(e)}")
         return None
 
-def find_high_risk_clauses(doc_type,user_id) -> List[Dict]:
+def find_high_risk_clauses(doc_type,user_id,filename) -> List[Dict]:
     """
     Find and return all high-risk clauses from the processed file stored in GCS
     """
