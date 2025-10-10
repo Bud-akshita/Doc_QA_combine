@@ -836,7 +836,7 @@ async def get_high_risk_result(
 
         if blob.exists():
             # File is done but memory was cleared
-            high_risk_clauses = find_high_risk_clauses(doc_type, user["id"])
+            high_risk_clauses = find_high_risk_clauses(doc_type, user["id"],filename)
             risk_results[key] = high_risk_clauses
             return {"status": "done", "high_risk_clauses": high_risk_clauses}
 
