@@ -38,7 +38,7 @@ const DocumentManager = ({ token, onLogout }) => {
   const [showReferenceModal, setShowReferenceModal] = useState(false);
   const [currentReferenceData, setCurrentReferenceData] = useState(null);
   const [currentReferenceId, setCurrentReferenceId] = useState(null);
-  
+
   // NEW: Risk processing status tracking
   const [riskProcessingStatus, setRiskProcessingStatus] = useState({});
   const [riskPollingIntervals, setRiskPollingIntervals] = useState({});
@@ -54,7 +54,7 @@ const DocumentManager = ({ token, onLogout }) => {
   const [scrapeMessage, setScrapeMessage] = useTimedMessage({ text: "", type: "" });
   const [riskMessage, setRiskMessage] = useTimedMessage({ text: "", type: "" });
   const [API_BASE_URL, setApiBaseUrl] = useState("");
-  
+
   useEffect(() => {
     const fetchUrl = async () => {
       try {
@@ -81,22 +81,10 @@ const DocumentManager = ({ token, onLogout }) => {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        
-        // Set processing status
-        setRiskProcessingStatus(prev => ({
-          ...prev,
-          [docName]: "processing"
-        }));
-
-        // Start polling for results
-        startRiskPolling(docName);
-        
+        setRiskProcessingStatus(prev => ({ ...prev, [docName]: "processing" }));
+        startRiskPolling(docName, docType); // pass docType here
         console.log(`High risk analysis started for ${docName}`);
         return true;
-      } else {
-        console.error("Failed to start high risk analysis");
-        return false;
       }
     } catch (error) {
       console.error("Error starting high risk analysis:", error);
@@ -105,8 +93,7 @@ const DocumentManager = ({ token, onLogout }) => {
   };
 
   // NEW: Poll for risk analysis results
-  const startRiskPolling = (docName) => {
-    // Clear existing interval if any
+  const startRiskPolling = (docName, docType) => {
     if (riskPollingIntervals[docName]) {
       clearInterval(riskPollingIntervals[docName]);
     }
@@ -114,42 +101,30 @@ const DocumentManager = ({ token, onLogout }) => {
     const intervalId = setInterval(async () => {
       try {
         const response = await fetch(
-          `${API_BASE_URL}/documents/high-risk-result/${encodeURIComponent(docName)}`,
+          `${API_BASE_URL}/documents/high-risk-result/${encodeURIComponent(docName)}?doc_type=${encodeURIComponent(docType)}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
 
         if (response.ok) {
           const data = await response.json();
-          
-          if (data.status === "done") {
-            // Analysis completed
-            setRiskProcessingStatus(prev => ({
-              ...prev,
-              [docName]: "done"
-            }));
 
-            // Clear the polling interval
+          if (data.status === "done") {
+            setRiskProcessingStatus(prev => ({ ...prev, [docName]: "done" }));
             clearInterval(intervalId);
             setRiskPollingIntervals(prev => {
               const newIntervals = { ...prev };
               delete newIntervals[docName];
               return newIntervals;
             });
-
             console.log(`High risk analysis completed for ${docName}`);
           }
-          // If status is still "processing", continue polling
         }
       } catch (error) {
         console.error("Error polling for risk results:", error);
       }
-    }, 5000); // Poll every 5 seconds
+    }, 5000);
 
-    // Store the interval ID
-    setRiskPollingIntervals(prev => ({
-      ...prev,
-      [docName]: intervalId
-    }));
+    setRiskPollingIntervals(prev => ({ ...prev, [docName]: intervalId }));
   };
 
   // NEW: Get risk analysis results
@@ -166,7 +141,7 @@ const DocumentManager = ({ token, onLogout }) => {
 
       if (response.ok) {
         const data = await response.json();
-        
+
         if (data.status === "done") {
           setRiskData({ high_risk_clauses: data.high_risk_clauses });
           setRiskMessage({
@@ -200,7 +175,7 @@ const DocumentManager = ({ token, onLogout }) => {
   const handleDocumentSelect = async (docName, isChecked) => {
     if (isChecked) {
       setSelectedDocuments((prev) => [...prev, docName]);
-      
+
       // Check if risk analysis hasn't been started for this document
       if (!riskProcessingStatus[docName]) {
         const selectedDoc = documents.find((doc) => doc.doc_name === docName);
@@ -279,10 +254,10 @@ const DocumentManager = ({ token, onLogout }) => {
           text: `Document "${docName}" deleted successfully`,
           type: "success",
         });
-        
+
         // Remove from selected documents if it was selected
         setSelectedDocuments((prev) => prev.filter((name) => name !== docName));
-        
+
         // Clear risk processing status and stop polling
         if (riskPollingIntervals[docName]) {
           clearInterval(riskPollingIntervals[docName]);
@@ -297,7 +272,7 @@ const DocumentManager = ({ token, onLogout }) => {
           delete newIntervals[docName];
           return newIntervals;
         });
-        
+
         // Refresh the document list
         fetchDocuments();
       } else {
@@ -330,9 +305,11 @@ const DocumentManager = ({ token, onLogout }) => {
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/documents/`, {
-        headers: { Authorization: `Bearer ${token}`, 
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',},
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
         cache: "no-store",
       });
 
@@ -408,11 +385,11 @@ const DocumentManager = ({ token, onLogout }) => {
           prev.map((conv) =>
             conv.id === newConversation.id
               ? {
-                  ...conv,
-                  answer: data.answer,
-                  loading: false,
-                  references: data.ref_map,
-                }
+                ...conv,
+                answer: data.answer,
+                loading: false,
+                references: data.ref_map,
+              }
               : conv
           )
         );
@@ -453,10 +430,10 @@ const DocumentManager = ({ token, onLogout }) => {
         prev.map((conv) =>
           conv.id === newConversation.id
             ? {
-                ...conv,
-                answer: "Network error. Please try again.",
-                loading: false,
-              }
+              ...conv,
+              answer: "Network error. Please try again.",
+              loading: false,
+            }
             : conv
         )
       );
