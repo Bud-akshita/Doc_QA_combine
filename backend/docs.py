@@ -798,7 +798,6 @@ risk_results = {}
 risk_vectors = {}
 
 def run_high_risk(filename: str, doc_type: str,user):
-    global risk_vectors
 
     file_path = download_from_gcs(user["id"], filename)
     content = extract_content(file_path)
@@ -833,8 +832,8 @@ async def get_high_risk_result(filename: str, user: dict = Depends(get_current_u
         "high_risk_clauses": risk_results[key]
     }
     
-@router.get("/get-reference/{ref}")
-async def get_reference(ref: str, filename: str, user: dict = Depends(get_current_user)):
+@router.get("/get-reference/{filename}/{ref}")
+async def get_reference(filename: str, ref: str, user: dict = Depends(get_current_user)):
 
     try:
         key = (user["id"], filename)
