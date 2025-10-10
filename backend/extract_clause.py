@@ -161,7 +161,7 @@ def extract(vectorstore, user_id: int,filename : str):
         f.write(cleaned_data)
 
     # Save final clean.json into GCS (per-user folder)
-    save_to_gcs(tmp_clean_path, f"{user_id}/{file_name}/clean.json")
+    save_to_gcs(tmp_clean_path, f"{user_id}/{filename}/clean.json")
 
     print(f"Final cleaned JSON saved to gs://{UPLOAD_BUCKET}/{user_id}/clean.json")
 
