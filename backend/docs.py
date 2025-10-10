@@ -803,8 +803,8 @@ def run_high_risk(filename: str, doc_type: str,user):
     content = extract_content(file_path)
 
     risk_vectors[(user["id"], filename)] = build_faiss_index(content, embedding_model)
-    extract(risk_vectors[(user["id"], filename)],user["id"])
-    high_risk_clauses = find_high_risk_clauses(doc_type,user["id"])
+    extract(risk_vectors[(user["id"], filename)],user["id"],filename)
+    high_risk_clauses = find_high_risk_clauses(doc_type,user["id"],filename)
 
     risk_results[(user["id"], filename)] = high_risk_clauses
 

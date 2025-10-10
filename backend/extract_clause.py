@@ -7,6 +7,7 @@ import os
 from google.cloud import storage
 import random
 import json
+import uuid
 
 API_KEYS = [
     "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",
@@ -78,7 +79,7 @@ def save_to_gcs(local_path: str, gcs_path: str):
     blob.upload_from_filename(local_path)
     print(f"Uploaded {local_path} -> gs://{UPLOAD_BUCKET}/{gcs_path}")
 
-def extract(vectorstore, user_id: int):
+def extract(vectorstore, user_id: int,filename : str):
     all_chunks = list(vectorstore.docstore._dict.values())
 
     BATCH_SIZE = 2
@@ -87,7 +88,10 @@ def extract(vectorstore, user_id: int):
     print(f"Total chunks to process: {total_chunks}")
     print(f"Processing in batches of {BATCH_SIZE}")
 
-    tmp_clauses_path = os.path.join(TMP_DIR, "clauses.json")
+    job_id = f"{user_id}_{filename}_{uuid.uuid4().hex[:6]}"
+    job_dir = os.path.join(TMP_DIR, job_id)
+
+    tmp_clauses_path = os.path.join(job_dir, "clauses.json")
     for batch_start in range(0, total_chunks, BATCH_SIZE):
         batch_end = min(batch_start + BATCH_SIZE, total_chunks)
         current_batch = all_chunks[batch_start:batch_end]
@@ -151,12 +155,12 @@ def extract(vectorstore, user_id: int):
     cleaned_data = data.replace("][", ",")
     cleaned_data = re.sub(r",+", ",", cleaned_data)
 
-    tmp_clean_path = os.path.join(TMP_DIR, "clean.json")
+    tmp_clean_path = os.path.join(job_dir, "clean.json")
     with open(tmp_clean_path, "w", encoding="utf-8") as f:
         f.write(cleaned_data)
 
     # Save final clean.json into GCS (per-user folder)
-    save_to_gcs(tmp_clean_path, f"{user_id}/clean.json")
+    save_to_gcs(tmp_clean_path, f"{user_id}/{file_name}/clean.json")
 
     print(f"Final cleaned JSON saved to gs://{UPLOAD_BUCKET}/{user_id}/clean.json")
 

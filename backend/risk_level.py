@@ -200,7 +200,7 @@ def find_high_risk_clauses(doc_type,user_id) -> List[Dict]:
         # Create GCS client
         storage_client = storage.Client()
         bucket = storage_client.bucket(UPLOAD_BUCKET)
-        blob = bucket.blob(f"{user_id}/clean.json")   # clean.json at bucket root (adjust path if nested)
+        blob = bucket.blob(f"{user_id}/{filename}/clean.json")   # clean.json at bucket root (adjust path if nested)
 
         # Download to a temporary file
         with tempfile.NamedTemporaryFile(mode="w+b", delete=False) as tmp_file:
