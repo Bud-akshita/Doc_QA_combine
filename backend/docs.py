@@ -795,15 +795,15 @@ async def translate_file(filename: str):
         raise HTTPException(status_code=500, detail=str(e))
     
 risk_results = {}
+risk_vectors = {}
 
 def run_high_risk(filename: str, doc_type: str,user):
 
-    # file_path = download_from_gcs(user["id"], filename)
-    # content = extract_content(file_path)
+    file_path = download_from_gcs(user["id"], filename)
+    content = extract_content(file_path)
 
-    # risk_vectors[(user["id"], filename)] = build_faiss_index(content, embedding_model)
-    vectorstor = download_vectore_from_gcs(user["id"],filename)
-    extract(vectorstor,user["id"],filename)
+    risk_vectors[(user["id"], filename)] = build_faiss_index(content, embedding_model)
+    extract(risk_vectors[(user["id"], filename)],user["id"],filename)
     high_risk_clauses = find_high_risk_clauses(doc_type,user["id"],filename)
 
     risk_results[(user["id"], filename)] = high_risk_clauses
@@ -852,8 +852,8 @@ async def get_high_risk_result(
 async def get_reference(filename: str, ref: str, user: dict = Depends(get_current_user)):
 
     try:
-        key = (user["id"], filename)
-        vector = download_vectore_from_gcs(user["id"],filename)
+        key = (user["id"], filename) 
+        vector = risk_vectors.get(key)
         if not vector:
             raise HTTPException(status_code=404, detail="No risk vectors found for this file")
         reference_info = get_reference_chunk(vector, ref)
