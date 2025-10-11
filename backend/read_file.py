@@ -39,9 +39,8 @@ def process_pdf_page(page_num, page):
     else:
         pix = page.get_pixmap(dpi=300)
         image = Image.open(io.BytesIO(pix.tobytes("png")))
-        text = pytesseract.image_to_string(image)
+        text = pytesseract.image_to_string(image,config='--psm 6 -c preserve_interword_spaces=1')
         return page_num, text.strip()
-
 
 def extract_content(file_path):
     if file_path.endswith("pdf"):
