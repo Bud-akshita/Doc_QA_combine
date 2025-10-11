@@ -820,7 +820,7 @@ async def start_high_risk(
     return {"status": "processing", "message": f"High risk analysis started for {filename}"}
 
 
-@router.get("/high-risk-result/{filename}")
+@router.get("/high-risk-result/{filename:path}")
 async def get_high_risk_result(
     filename: str,
     doc_type: str = Query(...),  # <- doc_type comes from frontend
