@@ -129,7 +129,7 @@ const DocumentManager = ({ token, onLogout }) => {
   };
 
   // NEW: Get risk analysis results
-  const getRiskAnalysisResults = async (docName) => {
+  const getRiskAnalysisResults = async (docName,docType) => {
     setLoadingRisk(true);
     setRiskData(null);
     setShowRiskModal(true);
