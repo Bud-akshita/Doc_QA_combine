@@ -136,7 +136,7 @@ const DocumentManager = ({ token, onLogout }) => {
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/documents/high-risk-result/${encodeURIComponent(docName)}`,
+        `${API_BASE_URL}/documents/high-risk-result/${encodeURIComponent(docName)}?doc_type=${encodeURIComponent(docType)}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
