@@ -97,9 +97,10 @@ const DocumentManager = ({ token, onLogout }) => {
     if (riskPollingIntervals[docName]) {
       clearInterval(riskPollingIntervals[docName]);
     }
-    console.log("docType:", docType, "docName:", docName);
     const intervalId = setInterval(async () => {
       try {
+        console.log("docName:", docName);
+        console.log("docType:", docType);
         const response = await fetch(
           `${API_BASE_URL}/documents/high-risk-result/${encodeURIComponent(docName)}?doc_type=${encodeURIComponent(docType)}`,
           { headers: { Authorization: `Bearer ${token}` } }
