@@ -97,7 +97,7 @@ const DocumentManager = ({ token, onLogout }) => {
     if (riskPollingIntervals[docName]) {
       clearInterval(riskPollingIntervals[docName]);
     }
-
+    console.log("docType:", docType, "docName:", docName);
     const intervalId = setInterval(async () => {
       try {
         const response = await fetch(
