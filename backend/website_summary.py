@@ -159,7 +159,6 @@ def summary(vectorstore):
     """Main summarization function"""
     print("Loading FAISS index...")
     
-    # Try to load improved index first, then fall back to original
     # try:
     #     load_faiss_index_from_gcs()
     #     print("Loaded improved FAISS index")
