@@ -45,7 +45,7 @@ router = APIRouter(
 UPLOAD_BUCKET = "my_bucket_upload"
 VECTORESTORE_BUCKET ="my_vectorestore_bucket"
 
-embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2",model_kwargs={"use_auth_token": os.environ.get["HF_TOKEN"]})
 # groq_api_key='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'
 groq_api_key ='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'
 llm=ChatGroq(groq_api_key=groq_api_key,model_name="llama-3.1-8b-instant")

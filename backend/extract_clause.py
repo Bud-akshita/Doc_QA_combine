@@ -18,7 +18,7 @@ api_key = random.choice(API_KEYS)
 
 client = Groq(api_key=api_key)
 
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2",model_kwargs={"use_auth_token": os.environ.get["HF_TOKEN"]})
 
 SYSTEM_INSTRUCTIONS = """You are an expert legal clause extractor specializing in agreements.
 

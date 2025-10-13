@@ -9,7 +9,7 @@ import os
 
 UPLOAD_BUCKET = "my_upload_bucket"
 
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2",model_kwargs={"use_auth_token": os.environ.get["HF_TOKEN"]})
 client = Groq(api_key="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")
 
 def load_url_mapping_gcs():
