@@ -5,7 +5,7 @@ import time
 import transformers
 from transformers import AutoModel
 from transformers import AutoTokenizer
-import fitz  # PyMuPDF
+import fitz  
 import io
 from PIL import Image
 import pytesseract
