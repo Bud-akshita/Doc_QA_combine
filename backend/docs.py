@@ -533,7 +533,7 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
             </context>
 
             Use the following sections as guidance:
-            {sections}
+            {input}
             """
         )
         vectors = build_faiss_index(content, embedding_model)
@@ -543,10 +543,10 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
         retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
         response = retrieval_chain.invoke({"input": sections_for_prompt})
+
         answer = response["answer"].replace("**", "")
 
         return {"summary": answer}
-
     else:
         try:        
             content = extract_content(file_path)
