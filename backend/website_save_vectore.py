@@ -13,7 +13,7 @@ import pickle
 import io
 
 # Embedding model wrapper for LangChain
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2",model_kwargs={"use_auth_token": os.environ.get["HF_TOKEN"]})
+embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2",model_kwargs={"use_auth_token": os.environ.get("HF_TOKEN")})
 
 UPLOAD_BUCKET = "my_bucket_upload"
 
