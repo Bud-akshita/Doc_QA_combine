@@ -16,7 +16,7 @@ from google.cloud import storage
 import logging
 import tempfile
 from google.api_core import exceptions as gcs_exceptions
-import reqquests
+import requests
 
 import traceback
 from langchain_community.vectorstores import FAISS
