@@ -2,6 +2,7 @@ import json
 import re
 from typing import Dict, List, Tuple, Optional
 from langchain_huggingface import HuggingFaceEmbeddings
+import os
 
 embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2",model_kwargs={"use_auth_token": os.environ.get("HF_TOKEN")})
 
