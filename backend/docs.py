@@ -16,6 +16,7 @@ from google.cloud import storage
 import logging
 import tempfile
 from google.api_core import exceptions as gcs_exceptions
+import reqquests
 
 import traceback
 from langchain_community.vectorstores import FAISS
@@ -486,6 +487,15 @@ async def get_chat_history_by_document(
     
     return [ChatHistoryWithDocumentResponse.from_orm(h) for h in history]
 
+def format_sections_for_prompt(loan_config):
+    sections_text = []
+    for section in loan_config["loan"].values():
+        title = section["title"]
+        questions = section["questions"]
+        questions_text = " | ".join(questions)  # You can separate with pipe or comma
+        sections_text.append(f"{title}: {questions_text}")
+    return "\n".join(sections_text)
+
 @router.post("/summary")
 async def generate_summary(filename :str = Form(...),document_type: str = Form(...), user:dict =Depends(get_current_user)):
     file_path = download_from_gcs(user["id"], filename)
@@ -494,6 +504,49 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
         vectorstore = save_vectore(file_path)
         answer = summary(vectorstore)
         return {"summary":answer}
+
+    elif document_type=='loan':
+        content = extract_content(file_path)
+
+        loan_config_url = os.environ.get("LOAN_CONFIG_URL")
+
+        response = requests.get(loan_config_url)
+
+        if response.status_code == 200:
+            loan_config = response.json()  # directly parse JSON
+            print(loan_config)
+        else:
+            print(f"Failed to fetch JSON. Status code: {response.status_code}")
+
+        sections_for_prompt = format_sections_for_prompt(loan_config)
+
+        prompt = ChatPromptTemplate.from_template(
+            """
+            Summarize the document content based on the provided context. 
+            For each section, provide:
+
+            1. The section title
+            2. A paragraph that answers the questions in that section in a natural, cohesive way
+
+            <context>
+            {context}
+            </context>
+
+            Use the following sections as guidance:
+            {sections}
+            """
+        )
+        vectors = build_faiss_index(content, embedding_model)
+
+        document_chain = create_stuff_documents_chain(llm, prompt)
+        retriever = vectors.as_retriever()
+        retrieval_chain = create_retrieval_chain(retriever, document_chain)
+
+        response = retrieval_chain.invoke({"input": sections_for_prompt})
+        answer = response["answer"].replace("**", "")
+
+        return {"summary": answer}
+
     else:
         try:        
             content = extract_content(file_path)
@@ -533,21 +586,21 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
                     Contact Information for Filing a Claim:
                     Contact Information for Making Policy Changes:""",
                 
-                "loan": """Document Type:
-                    Document Name:
-                    Date Issued:
-                    Issued By:
-                    Amount Borrowed:
-                    Interest Rate:
-                    Loan Term:
-                    Repayment Schedule:
-                    Prepayment Penalties:
-                    Late Fees:
-                    Default Terms:
-                    Customer Service Contact Information:
-                    Rights and Obligations:
-                    Disbursement Details:
-                    Grace Period:""",
+                # "loan": """Document Type:
+                #     Document Name:
+                #     Date Issued:
+                #     Issued By:
+                #     Amount Borrowed:
+                #     Interest Rate:
+                #     Loan Term:
+                #     Repayment Schedule:
+                #     Prepayment Penalties:
+                #     Late Fees:
+                #     Default Terms:
+                #     Customer Service Contact Information:
+                #     Rights and Obligations:
+                #     Disbursement Details:
+                #     Grace Period:""",
                 
                 "credit_card_terms": """Document Type:
                     Document Name:
