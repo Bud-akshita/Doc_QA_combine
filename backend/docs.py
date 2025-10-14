@@ -447,7 +447,7 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
             final_prompt = prompt.format(context=context, input=question)
             response = llm.invoke(final_prompt)
             result = response.content
-            answer = replace_refs_web(result,chunk_map)
+            answer = replace_refs(result,chunk_map)
             
             # store_path = download_vectore_from_gcs(VECTORESTORE_BUCKET,prefix=f"{user['id']}/{filename}/")
             # index, chunks, metadata = load_vectorstore_simple(VECTORESTORE_BUCKET,prefix=f"{user['id']}/{filename}/")
