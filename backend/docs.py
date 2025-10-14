@@ -26,6 +26,8 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
 from langchain.schema import Document
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import HNSWLib
 
 from read_file import extract_content
 from website_save_vectore import save_vectore
@@ -176,13 +178,20 @@ def download_vectore_from_gcs(user_id: str, filename: str) -> str:
 
     return temp_dir
 
-def build_faiss_index(page_texts,embeddings):
-    # Split into chunks
+def build_faiss_index(page_texts, embeddings):
+    # --- Step 1: Define recursive text splitter with overlap ---
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,       # number of characters per chunk
+        chunk_overlap=200,     # overlap between chunks
+        separators=["\n\n", "\n", "."," "]
+    )
+
+    # --- Step 2: Create document chunks ---
     docs = []
-    print(len(page_texts))
+    print(f"Total pages: {len(page_texts)}")
+
     for page_no, page_text in enumerate(page_texts, start=1):
-        # split into chunks directly from page text
-        chunks = chunk_text(page_text)
+        chunks = text_splitter.split_text(page_text)
         for i, chunk in enumerate(chunks):
             docs.append(
                 Document(
@@ -194,7 +203,16 @@ def build_faiss_index(page_texts,embeddings):
                 )
             )
 
-    vectorstore = FAISS.from_documents(docs, embeddings, distance_strategy="COSINE")
+    # --- Step 3: Build HNSW index ---
+    vectorstore = HNSWLib.from_documents(
+        docs,
+        embeddings,
+        space="cosine",   
+        num_threads=4,
+        ef_construction=40,
+        M=16,
+    )
+
     return vectorstore
 
 def chunk_text(text, max_words=150, overlap=20):
@@ -248,9 +266,9 @@ async def upload_doc(
         db.commit()
         db.refresh(new_doc)
 
-        tmp_path = f"/tmp/{file.filename}"
-        document = extract_content(tmp_path)
-        build_vectorstore_simple(document, file_name,VECTORESTORE_BUCKET,user["id"])
+        # tmp_path = f"/tmp/{file.filename}"
+        # document = extract_content(tmp_path)
+        # build_vectorstore_simple(document, file_name,VECTORESTORE_BUCKET,user["id"])
 
         return new_doc
     
@@ -291,7 +309,7 @@ def retrieve_best_chunks(question, vectorstore, top_k=12):
     # score comes between 0 to 2  0 means similar 2 means opposite
     for i, (doc, score) in enumerate(results):
         print(score)
-        if score <= 1.7 :
+        if score <= 1.2 :
             print(f"\n--- Chunk {i+1} ---")
             print("score:", score)
             print("Content:", doc.page_content[:200], "...")
@@ -394,6 +412,7 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
     else : 
         try:       
 
+            content = extract_content(file_path)
             prompt=ChatPromptTemplate.from_template(
             """
             Answer the questions based on the provided context only.
@@ -409,23 +428,29 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
             """
             )
 
-            # vectors = build_faiss_index(content,embedding_model)
-            # best_chunks = retrieve_best_chunks(question, vectors)
-            
-            # store_path = download_vectore_from_gcs(VECTORESTORE_BUCKET,prefix=f"{user['id']}/{filename}/")
-            index, chunks, metadata = load_vectorstore_simple(VECTORESTORE_BUCKET,prefix=f"{user['id']}/{filename}/")
-
-            # Optionally, delete temp folder after loading
-            # shutil.rmtree(store_path, ignore_errors=True)
-            results = similarity_search(question, index, chunks, metadata, k=12)
-            print(metadata)
-            context, chunk_map, ref_map= build_context(results)
+            vectors = build_faiss_index(content,embedding_model)
+            best_chunks = retrieve_best_chunks(question, vectors)
+            context, chunk_map, ref_map= build_context_web(best_chunks)
+            print(ref_map)
             final_prompt = prompt.format(context=context, input=question)
             response = llm.invoke(final_prompt)
             result = response.content
-            print(result)
-            answer = replace_refs(result,chunk_map)
-            print(answer)
+            answer = replace_refs_web(result,chunk_map)
+            
+            # store_path = download_vectore_from_gcs(VECTORESTORE_BUCKET,prefix=f"{user['id']}/{filename}/")
+            # index, chunks, metadata = load_vectorstore_simple(VECTORESTORE_BUCKET,prefix=f"{user['id']}/{filename}/")
+
+            # # Optionally, delete temp folder after loading
+            # # shutil.rmtree(store_path, ignore_errors=True)
+            # results = similarity_search(question, index, chunks, metadata, k=12)
+            # print(metadata)
+            # context, chunk_map, ref_map= build_context(results)
+            # final_prompt = prompt.format(context=context, input=question)
+            # response = llm.invoke(final_prompt)
+            # result = response.content
+            # print(result)
+            # answer = replace_refs(result,chunk_map)
+            # print(answer)
 
             doc = db.query(Documents).filter(Documents.doc_name == filename).first()
             if not doc:
