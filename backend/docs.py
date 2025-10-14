@@ -203,7 +203,7 @@ def build_faiss_index(docs, embeddings, space='cosine', M=16, efConstruction=40)
     embeddings: list or array of vector embeddings
     space: 'cosine' or 'l2'
     """
-    vecs = np.array([embeddings[i] for i in range(len(docs))]).astype('float32')
+    vecs = np.array([embeddings_model.embed_query(doc) for doc in docs]).astype('float32')
 
     dim = vecs.shape[1]
 
@@ -433,7 +433,6 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
             Whenever you include a reference, format it strictly as [REF:pgXcY]
             """
             )
-
             docs = chunk_documents(content)
             embeddings_array = [embedding_model.embed_query(doc.page_content) for doc in docs]
             index, docs = build_faiss_index(docs, embeddings_array, space='cosine')
