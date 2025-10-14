@@ -96,7 +96,7 @@ def download_vectorstore_from_gcs(bucket_name: str, prefix: str) -> str:
     
     return temp_dir
 
-def fixed_size_chunker(document, tokenizer, chunk_size=180, stride=150):
+def fixed_size_chunker(document, tokenizer, chunk_size=200, stride=165):
     all_chunks = []
     all_span_annotations = []
     all_metadata = []
@@ -214,7 +214,7 @@ def build_vectorstore_simple(document, file_name, bucket_name, user_id):
     
     return index, chunks, metadata
 
-def similarity_search(query, index, chunks, metadata, k=25):
+def similarity_search(query, index, chunks, metadata, k=12):
     """
     Perform similarity search on the FAISS index
     

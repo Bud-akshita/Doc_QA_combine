@@ -283,7 +283,7 @@ async def delete_doc(doc_name: str, doc_type: str, db: db_dependency, user: dict
     db.commit()
     return {"message": f"Document '{doc_name}' deleted successfully from DB and GCS"}
     
-def retrieve_best_chunks(question, vectorstore, top_k=20):
+def retrieve_best_chunks(question, vectorstore, top_k=12):
     results = vectorstore.similarity_search_with_score(question, k=top_k)
     print("length of result:", len(results))
 
@@ -417,7 +417,7 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
 
             # Optionally, delete temp folder after loading
             # shutil.rmtree(store_path, ignore_errors=True)
-            results = similarity_search(question, index, chunks, metadata, k=22)
+            results = similarity_search(question, index, chunks, metadata, k=12)
             print(metadata)
             context, chunk_map, ref_map= build_context(results)
             final_prompt = prompt.format(context=context, input=question)
@@ -521,25 +521,36 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
         sections_for_prompt = format_sections_for_prompt(loan_config)
 
         prompt = ChatPromptTemplate.from_template(
-            """
-            Summarize the document content based on the provided context. 
-            For each section, provide:
+            """You are analyzing a loan agreement document. Your task is to answer questions about the loan based on the provided document excerpts.
 
-            1. The section title
-            2. A paragraph that answers the questions in that section in a natural, cohesive way
+            IMPORTANT INSTRUCTIONS:
+            1. Answer each question based ONLY on information found in the document context
+            2. If specific information is explicitly stated in the document, provide the exact details
+            3. If information is NOT found in the document, clearly state: "This information is not explicitly mentioned in the document"
+            4. Do NOT make assumptions or infer information that isn't clearly stated
+            5. Use natural language and write in cohesive paragraphs for each section
+            6. Be specific with numbers, dates, percentages, and terms when they are mentioned
 
+            Document Context:
             <context>
             {context}
             </context>
 
-            Use the following sections as guidance:
+            Questions to Answer (organized by sections):
             {input}
+
+            For each section above, provide:
+            - A section heading
+            - A detailed paragraph answering all questions in that section
+            - Clearly indicate when specific information is not available in the document
+
+            Format your response as clear paragraphs organized by section.
             """
         )
         vectors = build_faiss_index(content, embedding_model)
 
         document_chain = create_stuff_documents_chain(llm, prompt)
-        retriever = vectors.as_retriever()
+        retriever = vectors.as_retriever(search_type="similarity", search_kwargs={"k": 8})
         retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
         response = retrieval_chain.invoke({"input": sections_for_prompt})
@@ -771,7 +782,7 @@ async def ask_question_hindi(
             index, chunks, metadata = load_vectorstore_simple(VECTORESTORE_BUCKET,prefix=f"{user['id']}/{filename}/")
             # Optionally, delete temp folder after loading
             # shutil.rmtree(store_path, ignore_errors=True)
-            results = similarity_search(question, index, chunks, metadata, k=22)
+            results = similarity_search(question, index, chunks, metadata, k=12)
             print(metadata)
             context, chunk_map, ref_map= build_context(results)    
             final_prompt = prompt.format(context=context, input=english_question)
