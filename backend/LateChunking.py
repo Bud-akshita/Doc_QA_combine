@@ -176,45 +176,51 @@ def late_chunking(token_embeddings, span_annotations, max_length=2000):
     print("Time taken to compute chunk embeddings:", time.time() - start_time)
     return pooled_embeddings
 
-def build_vectorstore_simple(document, file_name, bucket_name, user_id):
-    print("Building vector store...")
+def build_vectorstore_simple(document, file_name, bucket_name, user_id,  M=16, efConstruction=40):
+    print("Building HNSW vector store...")
 
-    # Create temp folder instead of local permanent folder
+    # Create temp folder instead of permanent local folder
     if bucket_name:
         store_dir = tempfile.mkdtemp()
     else:
-        store_dir = os.path.join("VectoreStore", file_name)
+        store_dir = os.path.join("VectorStore", file_name)
         os.makedirs(store_dir, exist_ok=True)
 
+    # Chunk the document
     whole_document = " ".join(document)
     chunks, span_annotations, metadata = fixed_size_chunker(document, tokenizer)
     
+    # Get embeddings
     token_embeddings = document_to_token_embeddings(model, tokenizer, whole_document)
     chunk_embeddings = late_chunking(token_embeddings, span_annotations)
     
-    embeddings_array = np.array(chunk_embeddings)
+    embeddings_array = np.array(chunk_embeddings).astype('float32')  # FAISS requires float32
     dimension = embeddings_array.shape[1]
-    index = faiss.IndexFlatIP(dimension)
-    faiss.normalize_L2(embeddings_array)
-    index.add(embeddings_array)
     
+    # Normalize embeddings for cosine similarity
+    faiss.normalize_L2(embeddings_array)
+    
+    # Create HNSW index
+    index = faiss.IndexHNSWFlat(dimension, M)
+    index.hnsw.efConstruction = efConstruction
+    index.add(embeddings_array)
+
     # Save FAISS index and metadata
     faiss.write_index(index, os.path.join(store_dir, "index.faiss"))
     with open(os.path.join(store_dir, "chunks_metadata.pkl"), "wb") as f:
         pickle.dump({"chunks": chunks, "metadata": metadata}, f)
     
-    # Upload to GCS if bucket_name provided
+    # Upload to GCS if needed
     if bucket_name and user_id:
         dest_prefix = f"{user_id}/{file_name}"
         upload_vectorstore_to_gcs(store_dir, bucket_name, dest_prefix)
         shutil.rmtree(store_dir, ignore_errors=True)
         print(f"Vector store uploaded to gs://{bucket_name}/{dest_prefix}/")
 
-    logging.info("vectorestore created")
-    
+    logging.info("HNSW vector store created")
     return index, chunks, metadata
 
-def similarity_search(query, index, chunks, metadata, k=12):
+def similarity_search(query, index, chunks, metadata, k=12, efSearch=16, score_threshold=0.6):
     """
     Perform similarity search on the FAISS index
     
@@ -229,31 +235,30 @@ def similarity_search(query, index, chunks, metadata, k=12):
         List of similar documents with scores
     """
     # Embed the query
+    index.hnsw.efSearch = efSearch
+
+    # Embed the query
     inputs = tokenizer(query, return_tensors="pt", truncation=True, padding=True)
     with torch.no_grad():
         outputs = model(**inputs)
     
-    # Get query embedding (mean pooling)
-    query_embedding = outputs.last_hidden_state.mean(dim=1).squeeze().numpy()
+    query_embedding = outputs.last_hidden_state.mean(dim=1).squeeze().numpy().astype('float32')
     query_embedding = query_embedding.reshape(1, -1)
-    
-    # Normalize the query embedding for cosine similarity
-    faiss.normalize_L2(query_embedding)
-    
+    faiss.normalize_L2(query_embedding)  # Normalize for cosine similarity
+
     # Search in the index
     scores, indices = index.search(query_embedding, k)
-    
-    # Prepare results
+
+    # Wrap results into Document objects
     results = []
-    for i, (score, idx) in enumerate(zip(scores[0], indices[0])):
-        if idx < len(chunks) and score > 0.5:  # ensure valid index + threshold
-            # Wrap into Document so build_context can handle it
+    for score, idx in zip(scores[0], indices[0]):
+        if idx < len(chunks) and score > score_threshold:
             doc = Document(
                 page_content=chunks[idx],
                 metadata=metadata[idx] if idx < len(metadata) else {}
             )
             results.append(doc)
-    print(results)
+
     return results
 
 def load_vectorstore_simple(bucket_name, prefix):
