@@ -27,7 +27,6 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import HNSWLib
 
 from read_file import extract_content
 from website_save_vectore import save_vectore
@@ -178,42 +177,49 @@ def download_vectore_from_gcs(user_id: str, filename: str) -> str:
 
     return temp_dir
 
-def build_faiss_index(page_texts, embeddings):
-    # --- Step 1: Define recursive text splitter with overlap ---
+def chunk_documents(page_texts, chunk_size=1000, chunk_overlap=200):
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,       # number of characters per chunk
-        chunk_overlap=200,     # overlap between chunks
-        separators=["\n\n", "\n", "."," "]
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=["\n\n", "\n", ".", "!", "?", ",", " ", ""]
     )
-
-    # --- Step 2: Create document chunks ---
     docs = []
-    print(f"Total pages: {len(page_texts)}")
-
     for page_no, page_text in enumerate(page_texts, start=1):
         chunks = text_splitter.split_text(page_text)
         for i, chunk in enumerate(chunks):
             docs.append(
                 Document(
                     page_content=chunk,
-                    metadata={
-                        "page_number": page_no,
-                        "chunk_index": i
-                    }
+                    metadata={"page_number": page_no, "chunk_index": i}
                 )
             )
+    return docs
 
-    # --- Step 3: Build HNSW index ---
-    vectorstore = HNSWLib.from_documents(
-        docs,
-        embeddings,
-        space="cosine",   
-        num_threads=4,
-        ef_construction=40,
-        M=16,
-    )
+def build_faiss_index(docs, embeddings, space='cosine', M=16, efConstruction=40):
+    """
+    docs: list of langchain Documents
+    embeddings: list or array of vector embeddings
+    space: 'cosine' or 'l2'
+    """
+    vecs = np.array([embeddings[i] for i in range(len(docs))]).astype('float32')
 
-    return vectorstore
+    dim = vecs.shape[1]
+
+    # --- choose distance metric ---
+    if space == 'cosine':
+        # normalize vectors for cosine similarity
+        faiss.normalize_L2(vecs)
+        index = faiss.IndexHNSWFlat(dim, M, faiss.METRIC_INNER_PRODUCT)
+    else:
+        index = faiss.IndexHNSWFlat(dim, M, faiss.METRIC_L2)
+
+    # Set efConstruction parameter
+    index.hnsw.efConstruction = efConstruction
+
+    # Add vectors to index
+    index.add(vecs)
+
+    return index, docs
 
 def chunk_text(text, max_words=150, overlap=20):
     words = text.split()
@@ -224,7 +230,6 @@ def chunk_text(text, max_words=150, overlap=20):
         chunks.append(" ".join(chunk))
         i += max_words - overlap  
     return chunks
-
 
 @router.get("/", response_model=List[DocumentResponse])
 async def get_docs(db: db_dependency, user: dict = Depends(get_current_user)):
@@ -301,22 +306,21 @@ async def delete_doc(doc_name: str, doc_type: str, db: db_dependency, user: dict
     db.commit()
     return {"message": f"Document '{doc_name}' deleted successfully from DB and GCS"}
     
-def retrieve_best_chunks(question, vectorstore, top_k=12):
-    results = vectorstore.similarity_search_with_score(question, k=top_k)
-    print("length of result:", len(results))
+def retrieve_best_chunks(index, query_embedding, docs, k=12, efSearch=50, space='cosine'):
+    query_vec = np.array(query_embedding).astype('float32').reshape(1, -1)
+    if space == 'cosine':
+        faiss.normalize_L2(query_vec)
 
-    filtered_docs = []
-    # score comes between 0 to 2  0 means similar 2 means opposite
-    for i, (doc, score) in enumerate(results):
+    index.hnsw.efSearch = efSearch
+    D, I = index.search(query_vec, k)  # D = distances, I = indices
+
+    results = []
+    for dist, idx in zip(D[0], I[0]):
+        doc = docs[idx]
+        # convert distance to similarity if cosine
+        score = dist  # higher = more similar (since using inner product)
         print(score)
-        if score <= 1.2 :
-            print(f"\n--- Chunk {i+1} ---")
-            print("score:", score)
-            print("Content:", doc.page_content[:200], "...")
-            print("Metadata:", doc.metadata)
-            filtered_docs.append(doc)
-
-    return filtered_docs
+    return results
 
 def build_context(chunks):
     context = []
@@ -428,9 +432,15 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
             """
             )
 
-            vectors = build_faiss_index(content,embedding_model)
-            best_chunks = retrieve_best_chunks(question, vectors)
-            context, chunk_map, ref_map= build_context_web(best_chunks)
+            docs = chunk_documents(content)
+            embeddings_array = [embedding_model.embed_query(doc.page_content) for doc in docs]
+            index, docs = build_faiss_index(docs, embeddings_array, space='cosine')
+            query_emb = embedding_model.embed_query(question)
+            best_chunks = retrieve_best_chunks(index, query_emb, docs, k=12, efSearch=16, space='cosine')
+
+            # vectors = build_faiss_index(content,embedding_model)
+            # best_chunks = retrieve_best_chunks(question, vectors)
+            context, chunk_map, ref_map= build_context(best_chunks)
             print(ref_map)
             final_prompt = prompt.format(context=context, input=question)
             response = llm.invoke(final_prompt)
