@@ -14,7 +14,7 @@ langchain-core==0.3.72
 langchain-community==0.3.27
 langchain-huggingface==0.1.0
 langchain-groq==0.3.7
-hnswlib==0.8.0
+numpy==2.1.3
 groq==0.31.0                     # example; check compatibility
 faiss-cpu==1.12.0
 pymupdf==1.26.3
