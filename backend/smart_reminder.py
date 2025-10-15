@@ -2,8 +2,10 @@ import re
 import spacy
 from groq import Groq
 from datetime import date
+import os
 
-client = Groq(api_key= "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")
+groq_api_key = os.environ.get('GROQ_API_KEY4')
+client = Groq(api_key= groq_api_key)
 
 prompt_template = """ Extract important dates from the given sentences including: {dates} if specified.
 

@@ -10,8 +10,8 @@ import json
 import uuid
 
 API_KEYS = [
-    "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",
-    "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",
+    os.environ.get(GROQ_API_KEY2),
+    os.environ.get(GROQ_API_KEY3),
 ]
 
 api_key = random.choice(API_KEYS)

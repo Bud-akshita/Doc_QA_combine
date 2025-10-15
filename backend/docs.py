@@ -49,8 +49,7 @@ UPLOAD_BUCKET = "my_bucket_upload"
 VECTORESTORE_BUCKET ="my_vectorestore_bucket"
 
 embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2",model_kwargs={"use_auth_token": os.environ.get("HF_TOKEN")})
-# groq_api_key='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'
-groq_api_key ='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'
+groq_api_key = os.environ.get("GROQ_API_KEY1")
 llm=ChatGroq(groq_api_key=groq_api_key,model_name="llama-3.1-8b-instant")
 
 REDIS_URL = os.environ.get("REDIS_URL")
@@ -321,7 +320,7 @@ def retrieve_best_chunks(index, query_embedding, docs, k=12, efSearch=50, space=
         doc = docs[idx]
         # convert distance to similarity if cosine
         score = dist  # higher = more similar (since using inner product)
-        if score <= 0.6
+        if score <= 0.6 :
             results.append(doc)
     return results
 
