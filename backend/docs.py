@@ -321,7 +321,8 @@ def retrieve_best_chunks(index, query_embedding, docs, k=12, efSearch=50, space=
         doc = docs[idx]
         # convert distance to similarity if cosine
         score = dist  # higher = more similar (since using inner product)
-        print(score)
+        if score <= 0.6
+            results.append(doc)
     return results
 
 def build_context(chunks):
