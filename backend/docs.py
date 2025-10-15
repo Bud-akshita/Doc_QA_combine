@@ -191,7 +191,7 @@ def chunk_documents(page_texts, chunk_size=1000, chunk_overlap=200):
             docs.append(
                 Document(
                     page_content=chunk,
-                    metadata={"page_number": page_no, "chunk_index": i}
+                    metadata={"page_no": page_no, "chunk_id": i}
                 )
             )
     return docs
@@ -320,7 +320,7 @@ def retrieve_best_chunks(index, query_embedding, docs, k=12, efSearch=50, space=
         doc = docs[idx]
         # convert distance to similarity if cosine
         score = dist  # higher = more similar (since using inner product)
-        if score <= 0.6 :
+        if score >= 0.2 :
             results.append(doc)
     return results
 
