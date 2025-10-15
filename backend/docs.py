@@ -202,8 +202,9 @@ def build_faiss_index(docs, embeddings, space='cosine', M=16, efConstruction=40)
     embeddings: list or array of vector embeddings
     space: 'cosine' or 'l2'
     """
-    vecs = np.array([embedding_model.embed_query(doc) for doc in docs]).astype('float32')
-
+    texts = [doc.page_content for doc in docs]
+    vecs = np.array(embedding_model.embed_documents(texts)).astype('float32')
+    
     dim = vecs.shape[1]
 
     # --- choose distance metric ---
