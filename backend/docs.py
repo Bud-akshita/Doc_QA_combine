@@ -246,7 +246,7 @@ def build_faiss_index(user_id, file_name, docs, embeddings, space='cosine', M=16
     # Add vectors to index
     index.add(vecs)
 
-    store_path = "/tmp"
+    store_dir = "/tmp"
     os.makedirs(store_dir, exist_ok=True)
 
     faiss_index_path = os.path.join(store_dir, "index.faiss")
