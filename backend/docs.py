@@ -161,7 +161,7 @@ def download_vectore_from_gcs(user_id: str, file_name: str, VECTORESTORE_BUCKET:
     Loads FAISS index and docs either from local cache or downloads them from Google Cloud Storage.
     """
     # Define cache paths
-    local_dir = os.path.join(cache_dir, user_id, file_name)
+    local_dir = os.path.join(cache_dir, str(user_id), file_name)
     os.makedirs(local_dir, exist_ok=True)
     
     index_path = os.path.join(local_dir, "index.faiss")
