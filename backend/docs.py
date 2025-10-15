@@ -178,7 +178,7 @@ def download_vectore_from_gcs(user_id: str, filename: str) -> str:
 
     return temp_dir
 
-def chunk_documents(page_texts, chunk_size=1000, chunk_overlap=200):
+def chunk_documents(page_texts, chunk_size=1200, chunk_overlap=200):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
@@ -204,7 +204,7 @@ def build_faiss_index(docs, embeddings, space='cosine', M=16, efConstruction=40)
     """
     texts = [doc.page_content for doc in docs]
     vecs = np.array(embedding_model.embed_documents(texts)).astype('float32')
-    
+
     dim = vecs.shape[1]
 
     # --- choose distance metric ---
