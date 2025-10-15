@@ -19,6 +19,7 @@ from google.api_core import exceptions as gcs_exceptions
 import requests
 import numpy as np
 import faiss
+import pickle
 
 import traceback
 from langchain_community.vectorstores import FAISS
