@@ -37,7 +37,7 @@ from translation import save_pdf, translate_to_hindi
 from extract_clause import extract
 from risk_level import find_high_risk_clauses , get_reference_chunk
 from smart_reminder import sentences_with_date_entity,call_lm
-from LateChunking import build_vectorstore_simple, load_vectorstore_simple, similarity_search
+# from LateChunking import build_vectorstore_simple, load_vectorstore_simple, similarity_search
 import redis
 
 router = APIRouter(
@@ -155,28 +155,53 @@ def delete_from_gcs(user_id: int, file_name: str):
     blob = bucket.blob(f"{user_id}/{file_name}")
     blob.delete()
 
-def download_vectore_from_gcs(user_id: str, filename: str) -> str:
+def download_vectore_from_gcs(user_id: str, file_name: str, VECTORESTORE_BUCKET: str, cache_dir: str = "/tmp"):
     """
-    Downloads the vector store folder from GCS to a temporary local directory.
-    Returns the path to the downloaded vector store.
+    Loads FAISS index and docs either from local cache or downloads them from Google Cloud Storage.
     """
+    # Define cache paths
+    local_dir = os.path.join(cache_dir, user_id, file_name)
+    os.makedirs(local_dir, exist_ok=True)
+    
+    index_path = os.path.join(local_dir, "index.faiss")
+    docs_path = os.path.join(local_dir, "docs.pkl")
+
+    # If files are already cached locally, load and return them
+    if os.path.exists(index_path) and os.path.exists(docs_path):
+        print(f"✅ Loaded from cache: {local_dir}")
+        index = faiss.read_index(index_path)
+        with open(docs_path, "rb") as f:
+            docs = pickle.load(f)
+        return index, docs
+
+    # Otherwise, download from GCS
+    print(f"⬇️ Downloading index and docs from GCS for {user_id}/{file_name} ...")
+
     client = storage.Client()
-    bucket = client.bucket(VECTORESTORE_BUCKET)  # Replace with your bucket name
-    prefix = f"{user_id}/{filename}"  # Assuming your vector store is stored as a folder per user/document
+    bucket = client.bucket(VECTORESTORE_BUCKET)
 
-    # Create a temp directory
-    temp_dir = tempfile.mkdtemp()
+    # Define GCS paths
+    index_blob_name = f"{user_id}/{file_name}/index.faiss"
+    docs_blob_name = f"{user_id}/{file_name}/docs.pkl"
 
-    # List all blobs with the given prefix
-    blobs = bucket.list_blobs(prefix=prefix)
+    # Download index file
+    index_blob = bucket.blob(index_blob_name)
+    docs_blob = bucket.blob(docs_blob_name)
 
-    for blob in blobs:
-        rel_path = os.path.relpath(blob.name, prefix)
-        local_path = os.path.join(temp_dir, rel_path)
-        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-        blob.download_to_filename(local_path)
+    if not index_blob.exists() or not docs_blob.exists():
+        raise FileNotFoundError(f"❌ index.faiss or docs.pkl not found in gs://{VECTORESTORE_BUCKET}/{user_id}/{file_name}/")
 
-    return temp_dir
+    index_blob.download_to_filename(index_path)
+    docs_blob.download_to_filename(docs_path)
+
+    # Load into memory
+    index = faiss.read_index(index_path)
+    with open(docs_path, "rb") as f:
+        docs = pickle.load(f)
+
+    print(f"✅ Downloaded and cached at {local_dir}")
+
+    return index, docs
 
 def chunk_documents(page_texts, chunk_size=1200, chunk_overlap=200):
     text_splitter = RecursiveCharacterTextSplitter(
@@ -196,7 +221,7 @@ def chunk_documents(page_texts, chunk_size=1200, chunk_overlap=200):
             )
     return docs
 
-def build_faiss_index(docs, embeddings, space='cosine', M=16, efConstruction=40):
+def build_faiss_index(user_id, file_name, docs, embeddings, space='cosine', M=16, efConstruction=40):
     """
     docs: list of langchain Documents
     embeddings: list or array of vector embeddings
@@ -221,6 +246,33 @@ def build_faiss_index(docs, embeddings, space='cosine', M=16, efConstruction=40)
     # Add vectors to index
     index.add(vecs)
 
+    store_path = "/tmp"
+    os.makedirs(store_dir, exist_ok=True)
+
+    faiss_index_path = os.path.join(store_dir, "index.faiss")
+    docs_path = os.path.join(store_dir, "docs.pkl")
+
+    faiss.write_index(index, faiss_index_path)
+    with open(docs_path, "wb") as f:
+        pickle.dump(docs, f)
+
+    # Upload to GCS if needed
+    dest_prefix = f"{user_id}/{file_name}"
+    client = storage.Client()
+    bucket = client.bucket(VECTORESTORE_BUCKET)
+    
+    index_blob_name = f"{dest_prefix}/index.faiss"
+    index_blob = bucket.blob(index_blob_name)
+    index_blob.upload_from_filename(faiss_index_path)
+
+    # Upload docs file
+    docs_blob_name = f"{dest_prefix}/docs.pkl"
+    docs_blob = bucket.blob(docs_blob_name)
+    docs_blob.upload_from_filename(docs_path)
+
+    # Clean up local temp files
+    shutil.rmtree(store_dir, ignore_errors=True)
+    print(f"Vector store uploaded to gs://{VECTORESTORE_BUCKET}/{dest_prefix}/")
     return index, docs
 
 def chunk_text(text, max_words=150, overlap=20):
@@ -273,8 +325,11 @@ async def upload_doc(
         db.commit()
         db.refresh(new_doc)
 
-        # tmp_path = f"/tmp/{file.filename}"
-        # document = extract_content(tmp_path)
+        tmp_path = f"/tmp/{file.filename}"
+        document = extract_content(tmp_path)
+        docs = chunk_documents(document)
+        embeddings_array = [embedding_model.embed_query(doc.page_content) for doc in docs]
+        build_faiss_index(user["id"],file_name,docs, embeddings_array, space='cosine')
         # build_vectorstore_simple(document, file_name,VECTORESTORE_BUCKET,user["id"])
 
         return new_doc
@@ -370,7 +425,6 @@ def replace_refs_web(text,chunk_map):
 
 @router.post("/ask-question",response_model=AskQuestionResponse)
 async def ask_question(db: db_dependency,filename: str = Form(...),document_type: str = Form(...),question: str = Form(...), user: dict = Depends(get_current_user)):
-    file_path = download_from_gcs(user["id"], filename)
     
     if document_type =="website":
 
@@ -387,6 +441,7 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
             """
         )
         
+        file_path = download_from_gcs(user["id"], filename)
         vectors=save_vectore(file_path)
         best_chunks = retrieve_best_chunks(question, vectors)
         context, chunk_map, ref_map= build_context_web(best_chunks)
@@ -419,7 +474,6 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
     else : 
         try:       
 
-            content = extract_content(file_path)
             prompt=ChatPromptTemplate.from_template(
             """
             Answer the questions based on the provided context only.
@@ -434,9 +488,10 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
             Whenever you include a reference, format it strictly as [REF:pgXcY]
             """
             )
-            docs = chunk_documents(content)
-            embeddings_array = [embedding_model.embed_query(doc.page_content) for doc in docs]
-            index, docs = build_faiss_index(docs, embeddings_array, space='cosine')
+            # docs = chunk_documents(content)
+            # embeddings_array = [embedding_model.embed_query(doc.page_content) for doc in docs]
+            # index, docs = build_faiss_index(docs, embeddings_array, space='cosine')
+            index , docs = download_vectore_from_gcs(user["id"],filename)
             query_emb = embedding_model.embed_query(question)
             best_chunks = retrieve_best_chunks(index, query_emb, docs, k=12, efSearch=16, space='cosine')
 
@@ -449,7 +504,6 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
             result = response.content
             answer = replace_refs(result,chunk_map)
             
-            # store_path = download_vectore_from_gcs(VECTORESTORE_BUCKET,prefix=f"{user['id']}/{filename}/")
             # index, chunks, metadata = load_vectorstore_simple(VECTORESTORE_BUCKET,prefix=f"{user['id']}/{filename}/")
 
             # # Optionally, delete temp folder after loading
