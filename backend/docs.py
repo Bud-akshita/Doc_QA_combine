@@ -155,7 +155,7 @@ def delete_from_gcs(user_id: int, file_name: str):
     blob = bucket.blob(f"{user_id}/{file_name}")
     blob.delete()
 
-def download_vectore_from_gcs(user_id: str, file_name: str, VECTORESTORE_BUCKET: str, cache_dir: str = "/tmp"):
+def download_vectore_from_gcs(user_id: str, file_name: str, VECTORESTORE_BUCKET: str = VECTORESTORE_BUCKET, cache_dir: str = "/tmp"):
     """
     Loads FAISS index and docs either from local cache or downloads them from Google Cloud Storage.
     """
