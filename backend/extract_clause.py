@@ -103,7 +103,7 @@ def extract(vectorstore, user_id: int,filename : str):
         for doc in current_batch:
             content = doc.page_content
             meta = doc.metadata
-            meta_str = f"pg{meta.get('page_number', 0)}ck{meta.get('chunk_index', 0)}"
+            meta_str = f"pg{meta.get('page_no', 0)}ck{meta.get('chunk_id', 0)}"
             context += f"Content: {content}\n[REF]: {meta_str} [REF]\n"
         
         prompt = USER_TEMPLATE.format(context=context)

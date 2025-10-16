@@ -276,15 +276,15 @@ def build_faiss_index(user_id, file_name, docs, embeddings, space='cosine', M=16
     print(f"Vector store uploaded to gs://{VECTORESTORE_BUCKET}/{dest_prefix}/")
     return index, docs
 
-def chunk_text(text, max_words=150, overlap=20):
-    words = text.split()
-    chunks = []
-    i = 0
-    while i < len(words):
-        chunk = words[i:i+max_words]
-        chunks.append(" ".join(chunk))
-        i += max_words - overlap  
-    return chunks
+# def chunk_text(text, max_words=150, overlap=20):
+#     words = text.split()
+#     chunks = []
+#     i = 0
+#     while i < len(words):
+#         chunk = words[i:i+max_words]
+#         chunks.append(" ".join(chunk))
+#         i += max_words - overlap  
+#     return chunks
 
 @router.get("/", response_model=List[DocumentResponse])
 async def get_docs(db: db_dependency, user: dict = Depends(get_current_user)):
