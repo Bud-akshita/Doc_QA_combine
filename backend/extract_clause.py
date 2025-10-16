@@ -80,7 +80,7 @@ def save_to_gcs(local_path: str, gcs_path: str):
     print(f"Uploaded {local_path} -> gs://{UPLOAD_BUCKET}/{gcs_path}")
 
 def extract(vectorstore, user_id: int,filename : str):
-    all_chunks = list(vectorstore.docstore._dict.values())
+    all_chunks = vectorstore
 
     BATCH_SIZE = 2
     total_chunks = len(all_chunks)

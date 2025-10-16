@@ -958,7 +958,7 @@ def run_high_risk(filename: str, doc_type: str,user):
     file_path = download_from_gcs(user["id"], filename)
     content = extract_content(file_path)
 
-    risk_vectors[(user["id"], filename)] = build_faiss_index(content, embedding_model)
+    index, risk_vectors[(user["id"], filename)] = download_vectore_from_gcs(user["id"],filename)
     extract(risk_vectors[(user["id"], filename)],user["id"],filename)
     high_risk_clauses = find_high_risk_clauses(doc_type,user["id"],filename)
 
