@@ -639,8 +639,8 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
             Format your response as clear paragraphs organized by section.
             """
         )
-        index, vectors = download_vectore_from_gcs(user["id"],filename)
-
+        index, docs = download_vectore_from_gcs(user["id"],filename)
+        vectorstore = FAISS.from_documents(docs, embedding_model)
         document_chain = create_stuff_documents_chain(llm, prompt)
         retriever = vectors.as_retriever(search_type="similarity", search_kwargs={"k": 8})
         retrieval_chain = create_retrieval_chain(retriever, document_chain)
@@ -663,9 +663,9 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
                 Query:{input}
                 """
             )
-            vectors = build_faiss_index(content, embedding_model)
-
-            document_chain = create_stuff_documents_chain(llm, prompt)
+            vectors = download_vectore_from_gcs(user["id"],filename)
+            index, docs = download_vectore_from_gcs(user["id"],filename)
+            vectorstore = FAISS.from_documents(docs, embedding_model)
             retriever = vectors.as_retriever()
             retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
