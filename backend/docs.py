@@ -639,7 +639,7 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
             Format your response as clear paragraphs organized by section.
             """
         )
-        vectors = build_faiss_index(content, embedding_model)
+        index, vectors = download_vectore_from_gcs(user["id"],filename)
 
         document_chain = create_stuff_documents_chain(llm, prompt)
         retriever = vectors.as_retriever(search_type="similarity", search_kwargs={"k": 8})
