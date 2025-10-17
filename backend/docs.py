@@ -642,9 +642,7 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
 
         return {"summary": answer}
     else:
-        try:        
-            content = extract_content(file_path)
-
+        try:       
             prompt = ChatPromptTemplate.from_template(
                 """
                 Summarize and give the all important details mentioned in the Query Based on provided context only  
