@@ -579,15 +579,6 @@ async def get_chat_history_by_document(
     
     return [ChatHistoryWithDocumentResponse.from_orm(h) for h in history]
 
-def format_sections_for_prompt(loan_config):
-    sections_text = []
-    for section in loan_config["loan"].values():
-        title = section["title"]
-        questions = section["questions"]
-        questions_text = " | ".join(questions)  # You can separate with pipe or comma
-        sections_text.append(f"{title}: {questions_text}")
-    return "\n".join(sections_text)
-
 @router.post("/summary")
 async def generate_summary(filename :str = Form(...),document_type: str = Form(...), user:dict =Depends(get_current_user)):
     file_path = download_from_gcs(user["id"], filename)
@@ -610,44 +601,41 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
         else:
             print(f"Failed to fetch JSON. Status code: {response.status_code}")
 
-        sections_for_prompt = format_sections_for_prompt(loan_config)
-
         prompt = ChatPromptTemplate.from_template(
-            """You are analyzing a loan agreement document. Your task is to answer questions about the loan based on the provided document excerpts.
+            """
+                Answer the questions based on the provided context only.
+                Please provide the most accurate response based on the context and questions.
+                return a title paragraph combining the answer of the questions. if you are not able to find out answer of any question return not able to find information about this question.
+                <context>
+                {context}
+                <context>
 
-            IMPORTANT INSTRUCTIONS:
-            1. Answer each question based ONLY on information found in the document context
-            2. If specific information is explicitly stated in the document, provide the exact details
-            3. If information is NOT found in the document, clearly state: "This information is not explicitly mentioned in the document"
-            4. Do NOT make assumptions or infer information that isn't clearly stated
-            5. Use natural language and write in cohesive paragraphs for each section
-            6. Be specific with numbers, dates, percentages, and terms when they are mentioned
-
-            Document Context:
-            <context>
-            {context}
-            </context>
-
-            Questions to Answer (organized by sections):
-            {input}
-
-            For each section above, provide:
-            - A section heading
-            - A detailed paragraph answering all questions in that section
-            - Clearly indicate when specific information is not available in the document
-
-            Format your response as clear paragraphs organized by section.
+                title : {title}
+                Questions:{input}
             """
         )
         index, docs = download_vectore_from_gcs(user["id"],filename)
-        vectors = FAISS.from_documents(docs, embedding_model)
-        document_chain = create_stuff_documents_chain(llm, prompt)
-        retriever = vectors.as_retriever(search_type="similarity", search_kwargs={"k": 8})
-        retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
-        response = retrieval_chain.invoke({"input": sections_for_prompt})
+        for section in loan_config["loan"].values():
+            title = section["title"]
+            questions = ", ".join(section["questions"])
 
-        answer = response["answer"].replace("**", "")
+            query_emb = embedding_model.embed_query(questions)
+            best_chunks = retrieve_best_chunks(index, query_emb, docs, k=12, efSearch=16, space='cosine')
+            context = "\n".join(best_chunks)
+            prompt.format(context=context, title =title, input=question)
+            response = llm.invoke(final_prompt)
+            result = response.content
+            answer = "\n".join(result)
+
+        # vectors = FAISS.from_documents(docs, embedding_model)
+        # document_chain = create_stuff_documents_chain(llm, prompt)
+        # retriever = vectors.as_retriever(search_type="similarity", search_kwargs={"k": 8})
+        # retrieval_chain = create_retrieval_chain(retriever, document_chain)
+
+        # response = retrieval_chain.invoke({"input": sections_for_prompt})
+
+        # answer = response["answer"].replace("**", "")
 
         return {"summary": answer}
     else:
