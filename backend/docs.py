@@ -623,7 +623,7 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
             query_emb = embedding_model.embed_query(questions)
             best_chunks = retrieve_best_chunks(index, query_emb, docs, k=12, efSearch=16, space='cosine')
             context = "\n".join([chunk.page_content for chunk in best_chunks])
-            prompt.format(context=context, title =title, input=question)
+            prompt.format(context=context, title =title, input=questions)
             response = llm.invoke(final_prompt)
             result = response.content
             answer = "\n".join(result)
