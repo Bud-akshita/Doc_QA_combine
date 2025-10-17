@@ -813,14 +813,16 @@ async def ask_question_hindi(
                 """
             )
             
-            vectors=save_vectore(file_path)
-            best_chunks = retrieve_best_chunks(english_question, vectors)
-            context, chunk_map, ref_map= build_context_web(best_chunks)
+            index , docs = download_vectore_from_gcs(user["id"],filename)
+            query_emb = embedding_model.embed_query(question)
+            best_chunks = retrieve_best_chunks(index, query_emb, docs, k=12, efSearch=16, space='cosine')
+
+            context, chunk_map, ref_map= build_context(best_chunks)
             print(ref_map)
-            final_prompt = prompt.format(context=context, input=english_question)
+            final_prompt = prompt.format(context=context, input=question)
             response = llm.invoke(final_prompt)
             result = response.content
-            answer = replace_refs_web(result,chunk_map)
+            answer = replace_refs(result,chunk_map)
 
             hindi_answer = translator.translate(answer, src="en", dest="hi").text
             
