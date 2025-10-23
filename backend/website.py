@@ -109,9 +109,10 @@ def crawl_site(base_url, max_pages=20):
         visited.add(url) 
 
         try: 
-            resp = requests.get(url, headers=headers, timeout=15) 
-            if resp.status_code != 200: 
-                continue 
+                resp = requests.get(url, headers=headers, timeout=30) 
+            except requests.exceptions.SSLError:
+                print("SSL error, retrying without verification:", url)
+                resp = requests.get(url, headers=headers, timeout=30, verify=False) 
         except Exception: 
             continue 
 
@@ -135,8 +136,16 @@ def fetch_page_with_requests(url):
             if 'text/html' in content_type:
                 text = extract_text_with_bs(resp.text)
                 return url, text
-    except Exception:
-        pass
+    except requests.exceptions.SSLError:
+        resp = requests.get(url, headers=headers, timeout=20, verify=False)
+        if resp.status_code == 200:
+            # Check if content is HTML before parsing
+            content_type = resp.headers.get('content-type', '').lower()
+            if 'text/html' in content_type:
+                text = extract_text_with_bs(resp.text)
+                return url, text
+    except Exception as e:
+        print("Exception accured in fetching the result : ",e)
     return url, ""
 
 def scrap(url):
@@ -243,10 +252,7 @@ async def scrape_endpoint(
         if not parsed_url.netloc:
             raise HTTPException(status_code=400, detail="Invalid URL provided")
         
-        # Run scraping
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(scrap, url)
-            data = future.result(timeout=300)
+        data = scrape(url)
         
         if not data:
             raise HTTPException(status_code=500, detail="No data could be scraped from the website")
