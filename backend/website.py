@@ -109,10 +109,10 @@ def crawl_site(base_url, max_pages=20):
         visited.add(url) 
 
         try: 
-                resp = requests.get(url, headers=headers, timeout=30) 
-            except requests.exceptions.SSLError:
-                print("SSL error, retrying without verification:", url)
-                resp = requests.get(url, headers=headers, timeout=30, verify=False) 
+            resp = requests.get(url, headers=headers, timeout=30) 
+        except requests.exceptions.SSLError:
+            print("SSL error, retrying without verification:", url)
+            resp = requests.get(url, headers=headers, timeout=30, verify=False) 
         except Exception: 
             continue 
 
