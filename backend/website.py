@@ -252,7 +252,7 @@ async def scrape_endpoint(
         if not parsed_url.netloc:
             raise HTTPException(status_code=400, detail="Invalid URL provided")
         
-        data = scrape(url)
+        data = scrap(url)
         
         if not data:
             raise HTTPException(status_code=500, detail="No data could be scraped from the website")
