@@ -409,7 +409,7 @@ def build_context(chunks):
         i=i+1
         chunk_map[f"REF:{ref}"] = i
         ref_map[i] = [chunk.page_content, m.get('page_no',0)]
-        context.append(f"[REF:{ref}]\n{chunk.page_content}\n[/REF]\n")
+        context.append(f"[REF:{ref}]\n{chunk.page_content}")
 
     return "\n".join(context) ,chunk_map, ref_map 
 
@@ -440,6 +440,15 @@ def replace_refs_web(text,chunk_map):
     lambda m: f"({chunk_map.get(m.group(0)[1:-1], m.group(0))})", 
     text)
     return result
+
+# def validate_reference(response, valid_refs):
+#     """Ensure only valid references are used"""
+#     found_refs = re.findall(r'\[REF:pg\d+c\d+\]', response)
+#     for ref in found_refs:
+#         if ref not in valid_refs:
+#             # Flag hallucinated reference
+#             response = response.replace(ref, "")
+#     return response
 
 @router.post("/ask-question",response_model=AskQuestionResponse)
 async def ask_question(db: db_dependency,filename: str = Form(...),document_type: str = Form(...),question: str = Form(...), user: dict = Depends(get_current_user)):
@@ -509,13 +518,12 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
             3.  Formulate a direct, concise answer.
             4.  cite the source: Provide a excerpt or reference the section (e.g., 'As per Section 4.1...') that supports your answer.
             5.  For every response include the REF tag(s) at the END of the sentence.
-            6.  Whenever you include a reference, format it strictly as [REF:pgXcY]
+            6.  Whenever you include a reference, format it strictly as [REF:pgXcY] where X=page number, Y=chunk number
             
             **Answer Format:**
 
-            "question": "[The user's question]",
-            "answer": "Your concise answer to the question.",
-            "confidence": "High" | "Medium" | "Low" | "Not Found"
+            answer : "Your concise answer to the question.",
+            confidence : "High" | "Medium" | "Low" | "Not Found"
             """
             )
             index , docs = download_vectore_from_gcs(user["id"],filename)
@@ -612,16 +620,23 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
             print(f"Failed to fetch JSON. Status code: {response.status_code}")
 
         prompt = ChatPromptTemplate.from_template(
-            """
-                Answer the questions based on the provided context only.
-                Please provide the most accurate response based on the context and questions.
-                return a title paragraph combining the answer of the questions. if you are not able to find out answer of any question return not able to find information about this question.
-                <context>
-                {context}
-                <context>
+            """                
+            You are a helpful and precise assistant for summarizing financial documents.
+            Please provide the most accurate response based on the context and questions.
+            If the answer is not found in the document, state 'The document does not specify.'
+            <context>
+            {doc_type}
+            {context}
+            <context>
 
-                title : {title}
-                Questions:{input}
+            title : {title}
+            Questions:{input}
+
+            Instruction for generating summary
+
+            return title and paragraph combining the answer of given question.
+            Formulate a direct, concise summary.
+            Provide a excerpt or the section (e.g., 'As per Section 4.1...') that supports your summary
             """
         )
         index, docs = download_vectore_from_gcs(user["id"],filename)
@@ -635,7 +650,7 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
             query_emb = embedding_model.embed_query(questions)
             best_chunks = retrieve_best_chunks(index, query_emb, docs, k=12, efSearch=16, space='cosine')
             context = "\n".join([chunk.page_content for chunk in best_chunks])
-            final_prompt = prompt.format(context=context, title =title, input=questions)
+            final_prompt = prompt.format(doc_type=document_type,context=context, title =title, input=questions)
             response = llm.invoke(final_prompt)
             result = response.content
             all_answer.append(result)
