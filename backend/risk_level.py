@@ -178,7 +178,7 @@ def get_reference_chunk(vectorstore,ref: str) -> Optional[Dict]:
             "chunk_id": int(chunk_idx)
         }
         
-        for doc in vectorstore.docstore._dict.values():
+        for doc in vectorstore:
             if doc.metadata == metadata:
                 return {
                     "page_number": metadata['page_no'],

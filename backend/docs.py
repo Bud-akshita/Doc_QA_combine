@@ -38,7 +38,7 @@ from translation import save_pdf, translate_to_hindi
 from extract_clause import extract
 from risk_level import find_high_risk_clauses , get_reference_chunk
 from smart_reminder import sentences_with_date_entity,call_lm
-# from LateChunking import build_vectorstore_simple, load_vectorstore_simple, similarity_search
+from ai_insights import AI_INSIGHTS
 import redis
 
 router = APIRouter(
@@ -454,7 +454,7 @@ async def delete_doc(doc_name: str, doc_type: str, db: db_dependency, user: dict
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error during deletion: {str(e)}")
-        
+
 def retrieve_best_chunks_web(question, vectorstore, top_k=12):
     results = vectorstore.similarity_search_with_score(question, k=top_k)
     print("length of result:", len(results))
@@ -725,15 +725,16 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
 
             Instruction for generating summary
 
-            return title and paragraph combining the answer of given question.
+            return title and the answer of given question.
             Formulate a direct, concise summary.
             Provide a excerpt or the section (e.g., 'As per Section 4.1...') that supports your summary
             """
         )
         index, docs = download_vectore_from_gcs(user["id"],filename)
 
+        question="what is the type of the loan (ex: )"
         all_answer = []
-
+        for key, qes in AI_INSIGHTS["loan"][subcategory.lower()]]
         for section in loan_config["loan"].values():
             title = section["title"]
             questions = ", ".join(section["questions"])
