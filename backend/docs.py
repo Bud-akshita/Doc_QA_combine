@@ -342,6 +342,82 @@ async def upload_doc(
             detail=f"failed to upload : {str(e)}"
         )
 
+def delete_vectore_from_gcs(user_id: int, file_name: str, bucket_name: str = VECTORESTORE_BUCKET):
+    """Delete vectorstore files from GCS"""
+    try:
+        client = storage.Client()
+        bucket = client.bucket(bucket_name)
+        
+        # Define the prefix for all vectorstore files
+        prefix = f"{user_id}/{file_name}/"
+        
+        # List and delete all blobs with this prefix
+        blobs = bucket.list_blobs(prefix=prefix)
+        
+        deleted_count = 0
+        for blob in blobs:
+            blob.delete()
+            deleted_count += 1
+            print(f"Deleted {blob.name} from vectorstore bucket")
+        
+        print(f"Deleted {deleted_count} vectorstore files for {user_id}/{file_name}")
+        return deleted_count
+        
+    except Exception as e:
+        logging.error(f"Error deleting vectorstore from GCS: {e}")
+        raise RuntimeError(f"Failed to delete vectorstore: {str(e)}")
+
+def cleanup_risk_data(user_id: int, file_name: str):
+    """Clean up in-memory risk data for the document"""
+    try:
+        # Clean up risk_results
+        risk_key = (user_id, file_name)
+        if risk_key in risk_results:
+            del risk_results[risk_key]
+            print(f"Cleaned up risk_results for {risk_key}")
+        
+        # Clean up risk_vectors
+        if risk_key in risk_vectors:
+            del risk_vectors[risk_key]
+            print(f"Cleaned up risk_vectors for {risk_key}")
+        
+        # Also clean any related files in risk analysis
+        cleanup_risk_files(user_id, file_name)
+        
+        return True
+        
+    except Exception as e:
+        logging.error(f"Error cleaning up risk data: {e}")
+        return False
+
+def cleanup_risk_files(user_id: int, file_name: str):
+    """Clean up any risk analysis files from GCS"""
+    try:
+        client = storage.Client()
+        bucket = client.bucket(UPLOAD_BUCKET)  # or create a separate risk bucket if needed
+        
+        # Clean up extracted clauses file if it exists
+        clauses_blob_name = f"{user_id}/{file_name}/clean.json"
+        clauses_blob = bucket.blob(clauses_blob_name)
+        if clauses_blob.exists():
+            clauses_blob.delete()
+            print(f"Deleted risk clauses file: {clauses_blob_name}")
+                
+    except Exception as e:
+        logging.error(f"Error cleaning up risk files: {e}")
+
+def cleanup_local_cache(user_id: int, file_name: str, cache_dir: str = "/tmp"):
+    """Clean up local cached vectorstore files"""
+    try:
+        local_dir = os.path.join(cache_dir, str(user_id), file_name)
+        if os.path.exists(local_dir):
+            shutil.rmtree(local_dir)
+            print(f"Cleaned up local cache: {local_dir}")
+        return True
+    except Exception as e:
+        logging.error(f"Error cleaning local cache: {e}")
+        return False
+
 @router.delete("/delete")
 async def delete_doc(doc_name: str, doc_type: str, db: db_dependency, user: dict = Depends(get_current_user)):
     document = (
@@ -356,14 +432,29 @@ async def delete_doc(doc_name: str, doc_type: str, db: db_dependency, user: dict
     if not document:
         raise HTTPException(status_code=404, detail="Document not found or not owned by user")
 
-    # Delete from GCS
-    delete_from_gcs(user["id"], doc_name)
+    try:
+        # Delete from GCS (upload bucket)
+        delete_from_gcs(user["id"], doc_name)
 
-    # Delete DB entry
-    db.delete(document)
-    db.commit()
-    return {"message": f"Document '{doc_name}' deleted successfully from DB and GCS"}
+        # Delete vectorstore from GCS
+        delete_vectore_from_gcs(user["id"], doc_name)
 
+        # Clean up local cache
+        cleanup_local_cache(user["id"], doc_name)
+
+        # Clean up in-memory risk data
+        cleanup_risk_data(user["id"], doc_name)
+
+        # Delete from database
+        db.delete(document)
+        db.commit()
+
+        return {"message": f"Document '{doc_name}' deleted successfully from all storage locations"}
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error during deletion: {str(e)}")
+        
 def retrieve_best_chunks_web(question, vectorstore, top_k=12):
     results = vectorstore.similarity_search_with_score(question, k=top_k)
     print("length of result:", len(results))
@@ -409,7 +500,7 @@ def build_context(chunks):
         i=i+1
         chunk_map[f"REF:{ref}"] = i
         ref_map[i] = [chunk.page_content, m.get('page_no',0)]
-        context.append(f"[REF:{ref}]\n{chunk.page_content}")
+        context.append(f"[REF:{ref}]\n{chunk.page_content}\n[/REF]")
 
     return "\n".join(context) ,chunk_map, ref_map 
 
@@ -516,8 +607,8 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
             1.  Analyze the user's question.
             2.  Search the document text for information that directly answers it.
             3.  Formulate a direct, concise answer.
-            4.  cite the source: Provide a excerpt or reference the section (e.g., 'As per Section 4.1...') that supports your answer.
-            5.  For every response include the REF tag(s) at the END of the sentence.
+            4.  cite the sourcein the answer: Provide a excerpt or reference the section (e.g., 'As per Section 4.1...') that supports your answer.
+            5.  For every response include the REF tag(s) at the END of the sentence as mentioned in the Text.
             6.  Whenever you include a reference, format it strictly as [REF:pgXcY] where X=page number, Y=chunk number
             
             **Answer Format:**
