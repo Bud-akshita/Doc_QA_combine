@@ -174,15 +174,15 @@ def get_reference_chunk(vectorstore,ref: str) -> Optional[Dict]:
     try:
         page_no, chunk_idx = match.groups()
         metadata = {
-            "page_number": int(page_no),
-            "chunk_index": int(chunk_idx)
+            "page_no": int(page_no),
+            "chunk_id": int(chunk_idx)
         }
         
         for doc in vectorstore.docstore._dict.values():
             if doc.metadata == metadata:
                 return {
-                    "page_number": metadata['page_number'],
-                    "chunk_index": metadata['chunk_index'],
+                    "page_number": metadata['page_no'],
+                    "chunk_index": metadata['chunk_id'],
                     "content": doc.page_content,
                     "reference": ref
                 }
