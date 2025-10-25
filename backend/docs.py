@@ -494,48 +494,41 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
 
             prompt=ChatPromptTemplate.from_template(
             """
-            Answer the questions based on the provided context only.
-            Please provide the most accurate response based on the context and question.
-            If the answer cannot be found in the context, respond with "I don't have enough information to answer that question."
-            <context>
-            {context}
+            You are a helpful and precise assistant for answering questions about financial documents. Use **only** the provided document text to answer the questions. 
+            If the answer is not found in the document, state 'The document does not specify.' Do not speculate or use outside knowledge. For numerical questions, provide the exact figure. For conditional questions, quote the relevant clause.
+ 
+            **Document Context:**
+            - **Type:** {doc_type}
+            - **Text:** {document_text}
+            
+            **User Question:** {user_question}
+            
+            **Instructions for Answering:**
+            1.  Analyze the user's question.
+            2.  Search the document text for information that directly answers it.
+            3.  Formulate a direct, concise answer.
+            4.  cite the source: Provide a excerpt or reference the section (e.g., 'As per Section 4.1...') that supports your answer.
+            5.  For every response include the REF tag(s) at the END of the sentence.
+            6.  Whenever you include a reference, format it strictly as [REF:pgXcY]
+            
+            **Answer Format:**
 
-            <context>
-            Questions:{input}
-            For every response include the REF tag(s) at the END of the sentence.
-            Whenever you include a reference, format it strictly as [REF:pgXcY]
+            "question": "[The user's question]",
+            "answer": "Your concise answer to the question.",
+            "confidence": "High" | "Medium" | "Low" | "Not Found"
             """
             )
-            # docs = chunk_documents(content)
-            # embeddings_array = [embedding_model.embed_query(doc.page_content) for doc in docs]
-            # index, docs = build_faiss_index(docs, embeddings_array, space='cosine')
             index , docs = download_vectore_from_gcs(user["id"],filename)
             query_emb = embedding_model.embed_query(question)
             best_chunks = retrieve_best_chunks(index, query_emb, docs, k=12, efSearch=16, space='cosine')
 
-            # vectors = build_faiss_index(content,embedding_model)
-            # best_chunks = retrieve_best_chunks(question, vectors)
             context, chunk_map, ref_map= build_context(best_chunks)
             print(ref_map)
-            final_prompt = prompt.format(context=context, input=question)
+            final_prompt = prompt.format(doc_type=document_type,document_text=context, user_question=question)
             response = llm.invoke(final_prompt)
             result = response.content
             answer = replace_refs(result,chunk_map)
             
-            # index, chunks, metadata = load_vectorstore_simple(VECTORESTORE_BUCKET,prefix=f"{user['id']}/{filename}/")
-
-            # # Optionally, delete temp folder after loading
-            # # shutil.rmtree(store_path, ignore_errors=True)
-            # results = similarity_search(question, index, chunks, metadata, k=12)
-            # print(metadata)
-            # context, chunk_map, ref_map= build_context(results)
-            # final_prompt = prompt.format(context=context, input=question)
-            # response = llm.invoke(final_prompt)
-            # result = response.content
-            # print(result)
-            # answer = replace_refs(result,chunk_map)
-            # print(answer)
-
             doc = db.query(Documents).filter(Documents.doc_name == filename).first()
             if not doc:
                 raise HTTPException(status_code=404, detail="Document not found")
@@ -648,14 +641,6 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
             all_answer.append(result)
 
         answer = "\n".join(all_answer)
-        # vectors = FAISS.from_documents(docs, embedding_model)
-        # document_chain = create_stuff_documents_chain(llm, prompt)
-        # retriever = vectors.as_retriever(search_type="similarity", search_kwargs={"k": 8})
-        # retrieval_chain = create_retrieval_chain(retriever, document_chain)
-
-        # response = retrieval_chain.invoke({"input": sections_for_prompt})
-
-        # answer = response["answer"].replace("**", "")
 
         return {"summary": answer}
     else:
@@ -816,16 +801,16 @@ async def ask_question_hindi(
             file_path = download_from_gcs(user["id"], filename)
 
             prompt=ChatPromptTemplate.from_template(
-                """
-                Answer the questions based on the provided context only.
-                Please provide the most accurate response based on the question and context. 
-                <context>
-                {context}
-                <context>
-                Questions:{input}
-                For every response include the URL tag(s) at the END of the sentence.
-                Whenever you include a URL, format it strictly as [URL:https://example.com/abc]
-                """
+            """
+            Answer the questions based on the provided context only.
+            Please provide the most accurate response based on the question and context. 
+            <context>
+            {context}
+            <context>
+            Questions:{input}
+            For every response include the URL tag(s) at the END of the sentence.
+            Whenever you include a URL, format it strictly as [URL:https://example.com/abc]
+            """
             )
             
             index , docs = download_vectore_from_gcs(user["id"],filename)
@@ -868,17 +853,31 @@ async def ask_question_hindi(
         else:
             prompt = ChatPromptTemplate.from_template(
                 """
-                Answer the questions based on the provided context only.
-                Please provide the most accurate response based on the question
-                <context>
-                {context}
-                </context>
-                Questions:{input}
-                """
+            You are a helpful and precise assistant for answering questions about financial documents. Use **only** the provided document text to answer the questions. 
+            If the answer is not found in the document, state 'The document does not specify.' Do not speculate or use outside knowledge. For numerical questions, provide the exact figure. For conditional questions, quote the relevant clause.
+ 
+            **Document Context:**
+            - **Type:** {doc_type}
+            - **Text:** {document_text}
+            
+            **User Question:** {user_question}
+            
+            **Instructions for Answering:**
+            1.  Analyze the user's question.
+            2.  Search the document text for information that directly answers it.
+            3.  Formulate a direct, concise answer.
+            4.  cite the source: Provide a excerpt or reference the section (e.g., 'As per Section 4.1...') that supports your answer.
+            5.  For every response include the REF tag(s) at the END of the sentence.
+            6.  Whenever you include a reference, format it strictly as [REF:pgXcY]
+            
+            **Answer Format:**
+
+            "question": "[The user's question]",
+            "answer": "Your concise answer to the question.",
+            "confidence": "High" | "Medium" | "Low" | "Not Found"
+            """
             )
             
-            # vectors = build_faiss_index(content, embedding_model)
-            # best_chunks = retrieve_best_chunks(question, vectors)
             # store_path = download_vectore_from_gcs(user["id"], filename)
             index, chunks, metadata = load_vectorstore_simple(VECTORESTORE_BUCKET,prefix=f"{user['id']}/{filename}/")
             # Optionally, delete temp folder after loading
@@ -886,7 +885,7 @@ async def ask_question_hindi(
             results = similarity_search(question, index, chunks, metadata, k=12)
             print(metadata)
             context, chunk_map, ref_map= build_context(results)    
-            final_prompt = prompt.format(context=context, input=english_question)
+            final_prompt = prompt.format(doc_type=document_type,document_text=context, user_question=english_question)
             response = llm.invoke(final_prompt)
             result = response.content
             print(result)
@@ -930,7 +929,6 @@ async def translate_file(filename: str):
         file_path = download_from_gcs(user["id"], filename)
     except Exception:
         raise HTTPException(status_code=404, detail="File not found in GCS")
-
 
     try:
         # Extract text (list of text chunks from the file)
