@@ -363,6 +363,23 @@ async def delete_doc(doc_name: str, doc_type: str, db: db_dependency, user: dict
     db.delete(document)
     db.commit()
     return {"message": f"Document '{doc_name}' deleted successfully from DB and GCS"}
+
+def retrieve_best_chunks_web(question, vectorstore, top_k=12):
+    results = vectorstore.similarity_search_with_score(question, k=top_k)
+    print("length of result:", len(results))
+
+    filtered_docs = []
+    # score comes between 0 to 2  0 means similar 2 means opposite
+    for i, (doc, score) in enumerate(results):
+        print(score)
+        if score <= 1.7 :
+            print(f"\n--- Chunk {i+1} ---")
+            print("score:", score)
+            print("Content:", doc.page_content[:200], "...")
+            print("Metadata:", doc.metadata)
+            filtered_docs.append(doc)
+
+    return filtered_docs
     
 def retrieve_best_chunks(index, query_embedding, docs, k=12, efSearch=50, space='cosine'):
     query_vec = np.array(query_embedding).astype('float32').reshape(1, -1)
@@ -444,7 +461,7 @@ async def ask_question(db: db_dependency,filename: str = Form(...),document_type
         
         file_path = download_from_gcs(user["id"], filename)
         vectors=save_vectore(file_path)
-        best_chunks = retrieve_best_chunks(question, vectors)
+        best_chunks = retrieve_best_chunks_web(question, vectors)
         context, chunk_map, ref_map= build_context_web(best_chunks)
         print(ref_map)
         final_prompt = prompt.format(context=context, input=question)
