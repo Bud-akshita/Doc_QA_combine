@@ -700,15 +700,15 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
     elif document_type=='loan':
         content = extract_content(file_path)
 
-        loan_config_url = os.environ.get("LOAN_CONFIG_URL")
+        # loan_config_url = os.environ.get("LOAN_CONFIG_URL")
 
-        response = requests.get(loan_config_url)
+        # response = requests.get(loan_config_url)
 
-        if response.status_code == 200:
-            loan_config = response.json()  # directly parse JSON
-            print(loan_config)
-        else:
-            print(f"Failed to fetch JSON. Status code: {response.status_code}")
+        # if response.status_code == 200:
+        #     loan_config = response.json()  # directly parse JSON
+        #     print(loan_config)
+        # else:
+        #     print(f"Failed to fetch JSON. Status code: {response.status_code}")
 
         prompt = ChatPromptTemplate.from_template(
             """                
@@ -732,12 +732,20 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
         )
         index, docs = download_vectore_from_gcs(user["id"],filename)
 
-        question="what is the type of the loan (ex: )"
+        subcategory_prompt = ChatPromptTemplate.from_template("""
+        question : what is the type of the loan (ex: personal,edication,microfinance,mortage,gold,vehicle,business,credit card) if no one from provided e.x return default.
+        provide one word answer from the given context. context {input} 
+        """)
+        input = " ".join(doc.page_content for doc in docs[:4])
+        final_sub_prompt = subcategory_prompt.format(doc_type=document_type,context=context, title =title, input=questions)
+        response = llm.invoke(final_sub_prompt)
+        subcategory= response.content
+
+        for doc in docs[]
         all_answer = []
-        for key, qes in AI_INSIGHTS["loan"][subcategory.lower()]]
-        for section in loan_config["loan"].values():
-            title = section["title"]
-            questions = ", ".join(section["questions"])
+        for key, qes in AI_INSIGHTS["loan"][subcategory.lower()]
+            title = key
+            questions = qes
 
             query_emb = embedding_model.embed_query(questions)
             best_chunks = retrieve_best_chunks(index, query_emb, docs, k=12, efSearch=16, space='cosine')
@@ -747,7 +755,19 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
             result = response.content
             all_answer.append(result)
 
-        answer = "\n".join(all_answer)
+        # for section in loan_config["loan"].values():
+        #     title = section["title"]
+        #     questions = ", ".join(section["questions"])
+
+        #     query_emb = embedding_model.embed_query(questions)
+        #     best_chunks = retrieve_best_chunks(index, query_emb, docs, k=12, efSearch=16, space='cosine')
+        #     context = "\n".join([chunk.page_content for chunk in best_chunks])
+        #     final_prompt = prompt.format(doc_type=document_type,context=context, title =title, input=questions)
+        #     response = llm.invoke(final_prompt)
+        #     result = response.content
+        #     all_answer.append(result)
+
+        # answer = "\n".join(all_answer)
 
         return {"summary": answer}
     else:
