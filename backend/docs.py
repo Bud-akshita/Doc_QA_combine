@@ -711,22 +711,30 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
         #     print(f"Failed to fetch JSON. Status code: {response.status_code}")
 
         prompt = ChatPromptTemplate.from_template(
-            """                
-            You are a helpful and precise assistant for summarizing financial documents.
-            Please provide the most accurate response based on the context and questions.
-            If the answer is not found in the document, state 'The document does not specify.'
+        """                
+            You are a helpful and precise assistant for summarizing financial documents.  
+            Your task is to extract the most accurate and concise answers from the given document context.  
+            If an answer is not found in the document, respond with "The document does not specify."
+
             <context>
             {doc_type}
             {context}
-            <context>
+            </context>
 
             title : {title}
-            Questions:{input}
+            Questions: {input}
 
-            Instruction for generating summary
+            ### Instructions for generating output:
 
-            return title and the answer of given question.
-            Formulate a direct, concise summary.
+            1. For each question, return only the **title** and its **answer**.
+            2. The answer should be direct, factual, and 1–3 lines long.
+            3. The format must strictly follow this structure:
+
+            "Title": "Answer"
+
+            4. Do **not** include explanations, summaries, bullet points, or extra text.
+            5. If a detail is missing, respond exactly with: "The document does not specify."
+
             """
         )
         index, docs = download_vectore_from_gcs(user["id"],filename)
