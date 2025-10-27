@@ -727,7 +727,6 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
 
             return title and the answer of given question.
             Formulate a direct, concise summary.
-            Provide a excerpt or the section (e.g., 'As per Section 4.1...') that supports your summary
             """
         )
         index, docs = download_vectore_from_gcs(user["id"],filename)
