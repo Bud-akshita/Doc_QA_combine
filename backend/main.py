@@ -39,7 +39,6 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(docs.router)
 app.include_router(website.router)
-# app.mount("/", StaticFiles(directory="frontend/build", html=True), name="static")
 
 models.Base.metadata.create_all(bind=engine)
 
