@@ -737,7 +737,7 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
         provide one word answer from the given context. context {input} 
         """)
         input = " ".join(doc.page_content for doc in docs[:4])
-        final_sub_prompt = subcategory_prompt.format(doc_type=document_type,context=context, title =title, input=questions)
+        final_sub_prompt = subcategory_prompt.format(input=input)
         response = llm.invoke(final_sub_prompt)
         subcategory= response.content
 
