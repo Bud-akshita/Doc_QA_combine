@@ -742,7 +742,7 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
         subcategory= response.content
 
         all_answer = []
-        for key, qes in AI_INSIGHTS["loan"][subcategory.lower()]
+        for key, qes in AI_INSIGHTS["loan"][subcategory.lower()]:
             title = key
             questions = qes
 
