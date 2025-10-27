@@ -734,7 +734,7 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
 
         subcategory_prompt = ChatPromptTemplate.from_template("""
         question : what is the type of the loan (ex: personal,edication,microfinance,mortage,gold,vehicle,business,credit card) if no one from provided e.x return default.
-        provide one word answer from the given context. context {input} 
+        Strictly, provide one word answer from the given context. context {input} 
         """)
         input = " ".join(doc.page_content for doc in docs[:4])
         final_sub_prompt = subcategory_prompt.format(input=input)
@@ -766,7 +766,7 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
         #     result = response.content
         #     all_answer.append(result)
 
-        # answer = "\n".join(all_answer)
+        answer = "\n".join(all_answer)
 
         return {"summary": answer}
     else:
