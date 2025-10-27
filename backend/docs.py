@@ -741,7 +741,6 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
         response = llm.invoke(final_sub_prompt)
         subcategory= response.content
 
-        for doc in docs[]:
         all_answer = []
         for key, qes in AI_INSIGHTS["loan"][subcategory.lower()]
             title = key
@@ -1106,8 +1105,9 @@ async def start_high_risk(
     user: dict = Depends(get_current_user),
     background_tasks: BackgroundTasks = None
 ):
-    background_tasks.add_task(run_high_risk, filename, doc_type,user)
-    return {"status": "processing", "message": f"High risk analysis started for {filename}"}
+    if doc_type != "website":
+        background_tasks.add_task(run_high_risk, filename, doc_type,user)
+        return {"status": "processing", "message": f"High risk analysis started for {filename}"}
 
 
 @router.get("/high-risk-result/{filename:path}")
@@ -1116,26 +1116,27 @@ async def get_high_risk_result(
     doc_type: str = Query(...),  # <- doc_type comes from frontend
     user: dict = Depends(get_current_user)
 ):
-    key = (user["id"], filename)
+    if doc_type != "website":
+        key = (user["id"], filename)
 
-    if key not in risk_results:
-        # Check if file is actually finished in GCS
-        storage_client = storage.Client()
-        bucket = storage_client.bucket("my_bucket_upload")
-        blob = bucket.blob(f"{user['id']}/{filename}/clean.json")
+        if key not in risk_results:
+            # Check if file is actually finished in GCS
+            storage_client = storage.Client()
+            bucket = storage_client.bucket("my_bucket_upload")
+            blob = bucket.blob(f"{user['id']}/{filename}/clean.json")
 
-        if blob.exists():
-            # File is done but memory was cleared
-            high_risk_clauses = find_high_risk_clauses(doc_type, user["id"],filename)
-            risk_results[key] = high_risk_clauses
-            return {"status": "done", "high_risk_clauses": high_risk_clauses}
+            if blob.exists():
+                # File is done but memory was cleared
+                high_risk_clauses = find_high_risk_clauses(doc_type, user["id"],filename)
+                risk_results[key] = high_risk_clauses
+                return {"status": "done", "high_risk_clauses": high_risk_clauses}
 
-        # Restart the background job
-        background_tasks = BackgroundTasks()
-        background_tasks.add_task(run_high_risk, filename, doc_type, user)
-        return {"status": "restarted", "message": "Previous task lost; restarting analysis."}
+            # Restart the background job
+            background_tasks = BackgroundTasks()
+            background_tasks.add_task(run_high_risk, filename, doc_type, user)
+            return {"status": "restarted", "message": "Previous task lost; restarting analysis."}
 
-    return {"status": "done", "high_risk_clauses": risk_results[key]}
+        return {"status": "done", "high_risk_clauses": risk_results[key]}
         
 @router.get("/get-reference/{filename}/{ref}")
 async def get_reference(filename: str, ref: str, user: dict = Depends(get_current_user)):
