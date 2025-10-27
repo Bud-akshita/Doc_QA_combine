@@ -741,7 +741,7 @@ async def generate_summary(filename :str = Form(...),document_type: str = Form(.
         response = llm.invoke(final_sub_prompt)
         subcategory= response.content
 
-        for doc in docs[]
+        for doc in docs[]:
         all_answer = []
         for key, qes in AI_INSIGHTS["loan"][subcategory.lower()]
             title = key
